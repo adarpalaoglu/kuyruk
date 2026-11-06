@@ -8,22 +8,26 @@ is one table and each attribute is one column. The tables are:
 - `jobs`: one row per *job* (one submission of texts to process).
 - `job_items`: one row per *text* inside a job, with its result.
 
-It also holds the *public shapes* for users: what a sign-up must contain
-(`UserCreate`), what a reply about a user may show (`UserPublic`), and what a
-successful login returns (`Token`). These are not tables; they only describe
-data going in and out of the API, so internal fields can never leak out.
+It also holds the *public shapes*: what a sign-up must contain (`UserCreate`),
+what a reply about a user may show (`UserPublic`), what a successful login
+returns (`Token`), what a new job must contain (`JobCreate`, with the job
+limits), and what a reply about a job or one of its texts may show
+(`JobPublic`, `JobItemPublic`). These are not tables; they only describe data
+going in and out of the API, so internal fields can never leak out.
 
 The fields follow `docs/spec.md` section 5; the allowed states follow section 4.
 Rules about which state may follow which are added in the worker slices, not
 here.
 """
 
+import unicodedata
 import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import StringConstraints, field_validator
+from pydantic_core import PydanticCustomError
 from sqlalchemy import DateTime, Dialect, Enum, TypeDecorator, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
@@ -183,7 +187,9 @@ class Job(SQLModel, table=True):
     total: int = 0
     succeeded: int = 0
     failed: int = 0
-    tokens_needed: int = 0
+    # How many AI tokens this job needs. Empty (None) means "not counted yet";
+    # it is filled in by the daily budget check (Slice 6).
+    tokens_needed: int | None = None
     idempotency_key: str | None = None
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTCDateTime)
     started_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
@@ -280,3 +286,120 @@ class Token(SQLModel):
 
     access_token: str
     token_type: Literal["bearer"] = "bearer"
+
+
+# Invisible "control characters" (old typewriter-style commands such as "null"
+# or "bell") that a text may still contain: line break (\n), tab (\t) and
+# carriage return (\r, which Windows puts before every line break). Every other
+# one is refused: Postgres can't store the null character at all, and the rest
+# are invisible noise that a person would never type on purpose.
+ALLOWED_CONTROL_CHARACTERS = {"\n", "\t", "\r"}
+
+
+def text_problem(text: Any) -> str | None:
+    """Say what is wrong with one text of a job, or return None if it's fine.
+
+    The answer finishes a sentence that starts "Text 3 ...", so the user sees
+    which text broke which rule. The text itself is never repeated back.
+    """
+    if not isinstance(text, str):
+        return "is not a piece of text"
+    # strip() removes spaces, tabs and line breaks at both ends; if nothing is
+    # left, the text has no content.
+    if not text.strip():
+        return "is empty or only spaces"
+    # len() counts characters (Unicode code points), not bytes, so a Turkish
+    # "ş" counts as 1 even though it takes 2 bytes to store.
+    if len(text) > settings.max_text_chars:
+        return (
+            f"is longer than {settings.max_text_chars:,} characters "
+            f"(it has {len(text):,})"
+        )
+    for character in text:
+        # unicodedata.category gives each character's kind as a two-letter
+        # code: "Cc" means control character.
+        kind = unicodedata.category(character)
+        if kind == "Cc" and character not in ALLOWED_CONTROL_CHARACTERS:
+            return (
+                "contains an invisible control character "
+                f"(U+{ord(character):04X}), which is not allowed"
+            )
+        # "Cs" is a *lone surrogate*: half of a character such as an emoji,
+        # which only appears in a hand-made, broken request. Postgres can't
+        # store it either.
+        if kind == "Cs":
+            return "contains a broken character (half of an emoji or symbol)"
+    return None
+
+
+class JobCreate(SQLModel):
+    """What a new job (POST /jobs) must contain: a task and a list of texts.
+
+    All limits are checked here, before anything is saved. Breaking any limit
+    refuses the whole job (D12) with a 422 reply that names the first broken
+    text by its position, counted from 1 as a person would count.
+    """
+
+    task: Task
+    texts: list[str]
+
+    @field_validator("texts", mode="before")
+    @classmethod
+    def check_texts(cls, value: Any) -> Any:
+        """Check the number of texts and every text, before anything else.
+
+        "before" means this runs on the raw input, ahead of Pydantic's own
+        type check, so even a wrong type (e.g. a number among the texts) gets
+        our clear message with a 1-based position instead of Pydantic's
+        0-based one.
+        """
+        if not isinstance(value, list):
+            # PydanticCustomError lets us choose the exact message shown,
+            # without Pydantic's "Value error, " prefix.
+            raise PydanticCustomError("texts_not_a_list", "Must be a list of texts.")
+        low, high = settings.min_texts_per_job, settings.max_texts_per_job
+        if not low <= len(value) <= high:
+            raise PydanticCustomError(
+                "texts_count",
+                f"A job needs {low:,} to {high:,} texts; this one has {len(value):,}.",
+            )
+        for position, text in enumerate(value, start=1):
+            problem = text_problem(text)
+            if problem:
+                raise PydanticCustomError("text_invalid", f"Text {position} {problem}.")
+        return value
+
+
+class JobPublic(SQLModel):
+    """The only shape Kuyruk uses to reply about a job.
+
+    It leaves out the worker-only fields (owner_id, claimed_by, crash_count,
+    last_active_at) and the idempotency key, which are internal. `id` is the
+    job's ticket.
+    """
+
+    id: uuid.UUID
+    task: Task
+    state: JobState
+    total: int
+    succeeded: int
+    failed: int
+    tokens_needed: int | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    error_message: str | None
+
+
+class JobItemPublic(SQLModel):
+    """The only shape Kuyruk uses to reply about one text and its result.
+
+    Internal fields (the row's own id, its job's id, the number of tries) are
+    left out.
+    """
+
+    position: int
+    original_text: str
+    result: str | None
+    state: ItemState
+    error_message: str | None

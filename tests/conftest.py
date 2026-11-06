@@ -3,7 +3,8 @@
 A *fixture* is a helper that pytest hands to any test that names it as an
 argument. The fixtures here give each test its own brand-new, empty SQLite
 database kept in memory, so tests never touch a real database or each other,
-and a `client` that sends pretend web requests to the app using that database.
+a `client` that sends pretend web requests to the app using that database, and
+`log_in_as`, which signs a user up and logs them in.
 """
 
 import os
@@ -14,7 +15,7 @@ import os
 # environment wins over the one in `.env`.)
 os.environ["JWT_SECRET"] = "test-only-secret-not-used-anywhere-else-0123456789"
 
-from collections.abc import Iterator  # noqa: E402
+from collections.abc import Callable, Iterator  # noqa: E402
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -73,3 +74,21 @@ def client(engine: Engine) -> Iterator[TestClient]:
     app.dependency_overrides[get_session] = get_test_session
     yield TestClient(app)
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def log_in_as(client: TestClient) -> Callable[[str], dict[str, str]]:
+    """A helper that signs up a user, logs in, and returns the login header.
+
+    Use it as `headers = log_in_as("ayse")`, then send `headers=headers` with
+    any request that needs a logged-in user.
+    """
+
+    def sign_up_and_log_in(username: str) -> dict[str, str]:
+        """Create `username` (password "gizli1234") and return its login header."""
+        account = {"username": username, "password": "gizli1234"}
+        client.post("/register", json=account)
+        token = client.post("/token", data=account).json()["access_token"]
+        return {"Authorization": f"Bearer {token}"}
+
+    return sign_up_and_log_in

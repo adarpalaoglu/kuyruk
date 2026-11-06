@@ -2,10 +2,15 @@
 
 This file creates the FastAPI application (FastAPI is the library that turns
 Python functions into web addresses, called *routes*), makes sure the database
-tables exist on startup, and lists the routes. Sign-up and log-in routes live
-in `app/auth.py` and are added here; more routes come in later slices.
+tables exist on startup, and puts the pieces together:
+
+- the routes: sign-up and log-in (`app/auth.py`) and jobs (`app/jobs.py`);
+- the shared error shape for every error reply (`app/errors.py`);
+- the middleware that runs around every request (`app/middleware.py`):
+  request ID, timing log, crash safety and the request size limit.
 """
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -13,7 +18,21 @@ from fastapi import FastAPI
 
 from app.auth import router as auth_router
 from app.db import create_db_and_tables
+from app.errors import install_error_handlers
+from app.jobs import router as jobs_router
+from app.middleware import BodySizeLimitMiddleware, RequestIdMiddleware
 from app.settings import settings
+
+# Print Kuyruk's own log lines (e.g. the timing line of every request) to the
+# console. The web server sets up only its own loggers, so without this our
+# INFO lines would be silently dropped. Done only once, even if this file is
+# loaded again.
+kuyruk_log = logging.getLogger("kuyruk")
+if not kuyruk_log.handlers:
+    console = logging.StreamHandler()
+    console.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    kuyruk_log.addHandler(console)
+    kuyruk_log.setLevel(logging.INFO)
 
 
 @asynccontextmanager
@@ -30,6 +49,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.include_router(auth_router)
+app.include_router(jobs_router)
+install_error_handlers(app)
+
+# Middleware added later wraps the one added earlier, so the request-ID
+# middleware is the outermost layer: it also labels and logs the size
+# limit's 413 replies.
+app.add_middleware(BodySizeLimitMiddleware)
+app.add_middleware(RequestIdMiddleware)
 
 
 @app.get("/health")

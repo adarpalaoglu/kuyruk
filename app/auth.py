@@ -13,12 +13,13 @@ Hashing and passes themselves are in `app/security.py`.
 from typing import Annotated
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.db import get_session
+from app.errors import ApiError
 from app.models import Token, User, UserCreate, UserPublic
 from app.security import (
     DUMMY_HASH,
@@ -70,9 +71,8 @@ def register(new_user: UserCreate, session: SessionDep) -> User:
         # the database (instead of looking first) also catches two sign-ups
         # with the same name arriving at the same moment.
         session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Username already taken",
+        raise ApiError(
+            status.HTTP_409_CONFLICT, "username_taken", "Username already taken"
         ) from None
     session.refresh(user)
     return user
@@ -109,9 +109,10 @@ def login(
     """
     user = authenticate_user(session, form.username.lower(), form.password)
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=LOGIN_FAILED,
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            "login_failed",
+            LOGIN_FAILED,
             # The standard way to say "log in with a Bearer pass".
             headers={"WWW-Authenticate": "Bearer"},
         )
@@ -127,9 +128,10 @@ def get_current_user(
     expired, and a pass for a user who no longer exists. (A missing pass is
     already refused by `oauth2_scheme`.)
     """
-    not_logged_in = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Not logged in or login expired",
+    not_logged_in = ApiError(
+        status.HTTP_401_UNAUTHORIZED,
+        "not_authenticated",
+        "Not logged in or login expired",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:

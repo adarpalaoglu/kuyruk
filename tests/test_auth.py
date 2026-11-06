@@ -194,7 +194,9 @@ def test_wrong_password_and_unknown_user_give_the_same_401(client):
 
     assert wrong_password.status_code == unknown_user.status_code == 401
     assert wrong_password.json() == unknown_user.json()
-    assert wrong_password.json() == {"detail": "Incorrect username or password"}
+    assert wrong_password.json() == {
+        "error": {"code": "login_failed", "message": "Incorrect username or password"}
+    }
 
 
 def test_unknown_user_still_runs_the_password_check(client, monkeypatch):
@@ -231,7 +233,9 @@ def test_overlong_login_password_refused_without_the_slow_check(client, monkeypa
     response = log_in(client, password="x" * (settings.password_max_length + 1))
 
     assert response.status_code == 401
-    assert response.json() == {"detail": "Incorrect username or password"}
+    assert response.json() == {
+        "error": {"code": "login_failed", "message": "Incorrect username or password"}
+    }
     assert checks == []
 
 
