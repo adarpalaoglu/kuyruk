@@ -11,13 +11,31 @@ Three things live here:
 
 from collections.abc import Iterator
 
-from sqlalchemy import Engine
+from sqlalchemy import Engine, event
 from sqlmodel import Session, SQLModel, create_engine
 
 # Importing the models registers the tables with SQLModel; without this import
 # `create_all` below would not know which tables to make.
 from app import models  # noqa: F401
 from app.settings import settings
+
+
+def enforce_sqlite_foreign_keys(engine: Engine) -> None:
+    """Make a SQLite engine refuse rows that point at something missing.
+
+    A *foreign key* is a column that must hold the id of an existing row in
+    another table, e.g. a job's `owner_id` must be a real user. Postgres always
+    checks this; SQLite only does when told to, once per connection. Without
+    this, a test on SQLite could pass for code that Postgres would refuse.
+    """
+
+    # SQLAlchemy calls this function every time it opens a new connection.
+    @event.listens_for(engine, "connect")
+    def switch_on_foreign_keys(dbapi_connection, connection_record) -> None:
+        """Send SQLite the command that turns foreign-key checking on."""
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 
 def make_engine(database_url: str) -> Engine:
@@ -32,7 +50,10 @@ def make_engine(database_url: str) -> Engine:
         # web server may handle one request across threads, which is safe here
         # because each request has its own session, so we switch that check off.
         connect_args = {"check_same_thread": False}
-    return create_engine(database_url, connect_args=connect_args)
+    new_engine = create_engine(database_url, connect_args=connect_args)
+    if database_url.startswith("sqlite"):
+        enforce_sqlite_foreign_keys(new_engine)
+    return new_engine
 
 
 # The one engine the running app uses, pointed at DATABASE_URL.

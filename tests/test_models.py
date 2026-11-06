@@ -107,6 +107,21 @@ def test_duplicate_username_rejected(session):
         session.commit()
 
 
+def test_job_with_missing_owner_rejected(session):
+    # No user 999 exists. Postgres refuses this; SQLite must refuse it too.
+    session.add(Job(owner_id=999, task=Task.LLM))
+
+    with pytest.raises(IntegrityError):
+        session.commit()
+
+
+def test_text_with_missing_job_rejected(session):
+    session.add(JobItem(job_id=uuid.uuid4(), position=1, original_text="Merhaba"))
+
+    with pytest.raises(IntegrityError):
+        session.commit()
+
+
 def test_same_idempotency_key_twice_for_one_user_rejected(session):
     user = make_user(session)
     session.add(Job(owner_id=user.id, task=Task.LLM, idempotency_key="abc"))

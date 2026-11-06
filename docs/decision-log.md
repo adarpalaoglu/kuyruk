@@ -150,6 +150,12 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 - **Why:** Anyone who runs Kuyruk can try it in two minutes. It runs on their own machine, so there's no risk.
 - **Date:** 5 Nov 2026 · **Status:** Approved (6 Nov 2026)
 
+### D43 — Usernames are case-insensitive; English letters, digits and underscore only
+- **Decision:** Kuyruk turns usernames into lowercase at sign-up and at log-in, and allows only a–z, 0–9 and `_`.
+- **Why:** Otherwise ADAR and adar could be two different accounts, and someone could pretend to be another user. Turkish letters are left out because Turkish I/İ turn into lowercase differently from English, which makes look-alike names hard to rule out.
+- **Cost:** Turkish users can't use ç, ğ, ı, ö, ş, ü in usernames (ayşe must sign up as ayse). The texts inside jobs aren't affected; they keep every Turkish letter.
+- **Date:** 6 Nov 2026 · **Status:** Approved (6 Nov 2026)
+
 ---
 
 ## Worker
@@ -211,6 +217,12 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 ### D37 — Explain `pull_request_target`, never use it
 - **Why:** It gives secrets to strangers' pull requests. A deliberately unsafe example in a public project could be copied by someone who doesn't understand it.
 - **Date:** 5 Nov 2026 · **Status:** Approved (6 Nov 2026)
+
+### D42 — Tables are created on startup; no migration tool
+- **Decision:** When Kuyruk starts, it creates any tables that are missing (SQLModel `create_all`). I don't use a migration tool such as Alembic.
+- **Why:** The project will be finished and frozen, so the tables won't change after release. A migration tool would add code and steps that never get used.
+- **Cost:** `create_all` never changes a table that already exists. During development, changing a table means wiping the local database (`docker compose down -v`). In a product that keeps changing after release, I would use Alembic.
+- **Date:** 6 Nov 2026 · **Status:** Approved (6 Nov 2026)
 
 ---
 

@@ -6,6 +6,9 @@ the settings ignore any local `.env` file, so the tests give the same result on
 every machine.
 """
 
+import pytest
+from pydantic import ValidationError
+
 from app.settings import Settings
 
 
@@ -44,3 +47,46 @@ def test_empty_value_means_use_the_default(monkeypatch):
 
     assert settings.database_url == "sqlite:///./kuyruk.db"
     assert settings.app_name == "Kuyruk"
+
+
+def test_jwt_secret_is_required(monkeypatch):
+    # Without a secret Kuyruk must refuse to start, not use a guessable one.
+    monkeypatch.delenv("JWT_SECRET", raising=False)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+def test_short_jwt_secret_refused(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "x" * 31)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+def test_jwt_secret_hidden_when_settings_are_printed(monkeypatch):
+    secret = "a-secret-that-must-never-be-printed-0123"
+    monkeypatch.setenv("JWT_SECRET", secret)
+
+    settings = Settings(_env_file=None)
+
+    assert secret not in repr(settings)
+    assert secret not in str(settings.jwt_secret)
+    assert settings.jwt_secret.get_secret_value() == secret
+
+
+def test_auth_defaults_match_the_spec(monkeypatch):
+    for name in [
+        "ACCESS_TOKEN_MINUTES",
+        "USERNAME_MIN_LENGTH",
+        "USERNAME_MAX_LENGTH",
+        "PASSWORD_MIN_LENGTH",
+        "PASSWORD_MAX_LENGTH",
+    ]:
+        monkeypatch.delenv(name, raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.access_token_minutes == 30
+    assert (settings.username_min_length, settings.username_max_length) == (3, 30)
+    assert (settings.password_min_length, settings.password_max_length) == (8, 128)

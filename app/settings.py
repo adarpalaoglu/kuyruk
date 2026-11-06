@@ -6,6 +6,7 @@ starts) or by writing it in a local `.env` file. The variable name is the field
 name in capitals, e.g. `database_url` is read from `DATABASE_URL`.
 """
 
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,6 +33,25 @@ class Settings(BaseSettings):
     # `kuyruk.db`), which needs no server. Real use points this at Postgres,
     # e.g. postgresql+psycopg://kuyruk:PASSWORD@localhost:5432/kuyruk
     database_url: str = "sqlite:///./kuyruk.db"
+
+    # The secret key that signs login passes (JWTs, see app/security.py). Anyone
+    # who knows it could forge a pass for any user, so it lives only in `.env`.
+    # It has no default on purpose: Kuyruk refuses to start without it rather
+    # than run with a guessable key. At least 32 characters, so it can't be
+    # guessed by trying many keys. SecretStr hides the value as "**********"
+    # whenever the settings are printed or logged.
+    jwt_secret: SecretStr = Field(min_length=32)
+
+    # How long a login pass stays valid, in minutes. After that, log in again.
+    access_token_minutes: int = 30
+
+    # Allowed username and password lengths, checked on sign-up. The password
+    # maximum stops someone sending a huge "password" that would keep the
+    # (deliberately slow) password check busy for a long time.
+    username_min_length: int = 3
+    username_max_length: int = 30
+    password_min_length: int = 8
+    password_max_length: int = 128
 
 
 # One shared copy, created once when the program starts, that the rest of the

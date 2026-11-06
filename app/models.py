@@ -8,6 +8,11 @@ is one table and each attribute is one column. The tables are:
 - `jobs`: one row per *job* (one submission of texts to process).
 - `job_items`: one row per *text* inside a job, with its result.
 
+It also holds the *public shapes* for users: what a sign-up must contain
+(`UserCreate`), what a reply about a user may show (`UserPublic`), and what a
+successful login returns (`Token`). These are not tables; they only describe
+data going in and out of the API, so internal fields can never leak out.
+
 The fields follow `docs/spec.md` section 5; the allowed states follow section 4.
 Rules about which state may follow which are added in the worker slices, not
 here.
@@ -16,9 +21,13 @@ here.
 import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Annotated, Literal
 
+from pydantic import StringConstraints, field_validator
 from sqlalchemy import DateTime, Dialect, Enum, TypeDecorator, UniqueConstraint
 from sqlmodel import Field, SQLModel
+
+from app.settings import settings
 
 
 def utc_now() -> datetime:
@@ -123,7 +132,7 @@ class User(SQLModel, table=True):
 
     The password is never stored; only `hashed_password`, a one-way scrambled
     form of it that can check a password but not reveal it. This field must
-    never appear in any reply (Slice 2 adds the safe public reply models).
+    never appear in any reply: routes reply with `UserPublic` instead.
     """
 
     # Set the table name by hand: in Postgres "user" is a reserved word, so a
@@ -135,6 +144,8 @@ class User(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     # unique=True makes the database itself refuse a second user with the same
     # name, even if two sign-ups arrive at the same moment.
+    # Always stored in lowercase (see `UserCreate`), so this rule also stops
+    # "ADAR" from signing up when "adar" exists.
     username: str = Field(unique=True, index=True)
     hashed_password: str
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTCDateTime)
@@ -208,3 +219,64 @@ class JobItem(SQLModel, table=True):
     # How many times the AI has been asked about this text (up to 3).
     tries: int = 0
     error_message: str | None = None
+
+
+class UserCreate(SQLModel):
+    """What a sign-up (POST /register) must contain: a username and a password.
+
+    FastAPI checks these rules before our code runs and answers 422 if any is
+    broken, so the route only ever sees valid input.
+    """
+
+    # Only English letters a-z (either case), digits and underscore. Turkish
+    # letters are refused because Turkish I/İ lowercase differently from
+    # English, which would make "one name, one account" unreliable.
+    # (StringConstraints is used because SQLModel's own `regex=` option is
+    # silently ignored by the current Pydantic; a test checks the rule works.)
+    username: Annotated[
+        str,
+        StringConstraints(
+            min_length=settings.username_min_length,
+            max_length=settings.username_max_length,
+            pattern=r"^[A-Za-z0-9_]+$",
+        ),
+    ]
+    password: str = Field(
+        min_length=settings.password_min_length,
+        max_length=settings.password_max_length,
+    )
+
+    @field_validator("username")
+    @classmethod
+    def lowercase_username(cls, value: str) -> str:
+        """Store usernames in lowercase so "Adar" and "adar" are one account.
+
+        This stops look-alike accounts ("ADAR" pretending to be "adar"). It
+        runs after the checks above, so the value is already plain a-z/0-9/_.
+        """
+        return value.lower()
+
+
+class UserPublic(SQLModel):
+    """The only shape Kuyruk uses to reply about a user.
+
+    It lists the safe fields. When a route declares this as its reply shape
+    (`response_model`), FastAPI copies only these fields out of the full `User`
+    row and drops the rest, so `hashed_password` can never be sent.
+    """
+
+    id: int
+    username: str
+    created_at: datetime
+
+
+class Token(SQLModel):
+    """The reply to a successful login: the pass and how to present it.
+
+    "bearer" means: send it back on each request in the header
+    `Authorization: Bearer <access_token>`. This exact shape is what the OAuth2
+    standard (and the "Authorize" button on /docs) expects.
+    """
+
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"
