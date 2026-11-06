@@ -1,3 +1,8 @@
+# Kuyruk's project file: its name, the exact versions of the libraries it
+# needs, and the settings of its tools (ruff for style, pytest for tests).
+# Change dependencies only with `uv add` / `uv remove`, which also update
+# uv.lock (the full list of every library version actually installed).
+
 [project]
 name = "kuyruk"
 version = "0.1.0"
@@ -5,11 +10,14 @@ description = "A small, well-tested FastAPI job service for long Turkish text jo
 requires-python = "==3.12.*"
 dependencies = [
     "fastapi==0.162.0",
+    "psycopg[binary]==3.3.8",
     "pydantic-settings==2.16.2",
+    "sqlmodel==0.0.48",
     "uvicorn==0.54.0",
 ]
 
 [dependency-groups]
+# Needed only for development and tests, not to run Kuyruk.
 dev = [
     "httpx==0.28.1",
     "pytest==9.2.0",
@@ -22,8 +30,11 @@ line-length = 88
 target-version = "py312"
 
 [tool.ruff.lint]
+# Rule groups: E/F basic errors, I import order, B likely bugs,
+# UP newer Python style.
 select = ["E", "F", "I", "B", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Always measure coverage (how much of app/ the tests run) and fail below 85%.
 addopts = "--cov=app --cov-report=term-missing --cov-fail-under=85"

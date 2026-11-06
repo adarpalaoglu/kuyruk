@@ -1,26 +1,39 @@
+# GitHub Actions workflow (an automatic checklist GitHub runs on its own
+# computers). On every push and pull request it installs Kuyruk, checks code
+# style with ruff, and runs the tests with the 85% coverage gate. A red cross on
+# GitHub means one of these steps failed.
 name: CI
 
 on:
   push:
   pull_request:
 
+# Read-only access to the repository: this workflow never needs to change it.
 permissions:
   contents: read
 
 jobs:
   test:
+    # An exact machine image, so results don't change when GitHub updates
+    # "ubuntu-latest".
     runs-on: ubuntu-24.04
     steps:
+      # Actions are pinned to a fixed commit (the long hex code) rather than a
+      # movable tag, so nobody can change what runs here behind our back.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: "0.13.7"
+          # Reuse downloaded libraries between runs to save time.
           enable-cache: true
 
+      # --locked: fail if uv.lock doesn't match pyproject.toml, instead of
+      # quietly installing different versions.
       - name: Install dependencies
         run: uv sync --locked
 
+      # --check: only report formatting problems; never rewrite files in CI.
       - name: Ruff
         run: |
           uv run ruff check .

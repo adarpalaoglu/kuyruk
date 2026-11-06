@@ -1,4 +1,6 @@
-# Secrets
+# Files and folders git should never save or upload.
+
+# Secrets: .env holds passwords and stays on this machine only.
 .env
 
 # Python
@@ -6,7 +8,10 @@ __pycache__/
 *.py[cod]
 .venv/
 
-# Tools
+# Local SQLite database made when the app runs without Postgres.
+kuyruk.db
+
+# Tools (caches and coverage reports they write)
 .pytest_cache/
 .ruff_cache/
 .coverage

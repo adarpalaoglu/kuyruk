@@ -31,6 +31,13 @@ A small, well-tested FastAPI job service for long Turkish text jobs, plus four e
 - The words matter: a **job** is one submission; a **text** is one item inside it; the **worker** is only Kuyruk's separate worker process. Don't reuse these words for other things.
 - Don't add Celery, Redis, cloud hosting, or anything not in the spec.
 
+## Code comments
+- Write for a reader who has never seen this project and may not be a programmer.
+- Every file starts with a short comment: what this file is for and where it fits in Kuyruk.
+- Every class and function has a docstring in plain English: what it does and why it exists.
+- Comment every line or block whose reason isn't obvious. Explain why, not only what. Define a technical term the first time it appears in a file.
+- Keep comments true when code changes. No commented-out code.
+
 ## Commands
 - Install: `uv sync`
 - Tests: `uv run pytest`

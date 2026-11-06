@@ -1,0 +1,62 @@
+"""The connection between Kuyruk and its database.
+
+Three things live here:
+
+- the *engine*: the object that knows the database's address and keeps a small
+  pool of open connections to it, so each request doesn't have to reconnect;
+- `create_db_and_tables`, which makes any missing tables when Kuyruk starts;
+- `get_session`, which gives each web request its own *session* (one
+  conversation with the database: reads, writes, and saving them together).
+"""
+
+from collections.abc import Iterator
+
+from sqlalchemy import Engine
+from sqlmodel import Session, SQLModel, create_engine
+
+# Importing the models registers the tables with SQLModel; without this import
+# `create_all` below would not know which tables to make.
+from app import models  # noqa: F401
+from app.settings import settings
+
+
+def make_engine(database_url: str) -> Engine:
+    """Create an engine for the database at `database_url`.
+
+    It exists as a function so tests can make an engine for their own
+    throwaway database instead of the real one.
+    """
+    connect_args = {}
+    if database_url.startswith("sqlite"):
+        # SQLite normally refuses to share a connection between threads. The
+        # web server may handle one request across threads, which is safe here
+        # because each request has its own session, so we switch that check off.
+        connect_args = {"check_same_thread": False}
+    return create_engine(database_url, connect_args=connect_args)
+
+
+# The one engine the running app uses, pointed at DATABASE_URL.
+engine = make_engine(settings.database_url)
+
+
+def create_db_and_tables() -> None:
+    """Create every table that doesn't exist yet; existing tables are left as is.
+
+    Kuyruk uses this instead of a migration tool (a tool that changes existing
+    tables step by step) because the finished project is frozen and its tables
+    won't change after release.
+    """
+    SQLModel.metadata.create_all(engine)
+
+
+def get_session() -> Iterator[Session]:
+    """Give one web request one database session, and always close it after.
+
+    FastAPI calls this as a *dependency* (something a route asks for and
+    FastAPI supplies). Because it uses `yield`, FastAPI runs the code before
+    `yield` when the request starts and the clean-up after it when the request
+    ends. The `with` block closes the session even if the request fails, so
+    connections are never left open.
+    """
+    with Session(engine) as session:
+        yield session

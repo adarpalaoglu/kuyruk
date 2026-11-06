@@ -1,0 +1,36 @@
+# Docker Compose file: describes the programs ("services") Kuyruk runs in
+# containers, so one command (`docker compose up`) starts them all.
+#
+# For now (Slice 1) it holds only the database. The API, worker and web
+# interface are added in Slice 9.
+#
+# Docker reads POSTGRES_PASSWORD from the local `.env` file (never committed).
+
+services:
+  db:
+    # Postgres 16, pinned to an exact version and its fingerprint (digest), so
+    # the same image is used on every machine and forever, even if the
+    # "16.15-alpine" label is later moved. "alpine" is a small Linux base.
+    image: postgres:16.15-alpine@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
+    environment:
+      POSTGRES_USER: kuyruk
+      POSTGRES_DB: kuyruk
+      # The ":?" form stops with this message if the password is missing,
+      # instead of starting a database with no password.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports:
+      # Lets programs on the Mac reach the database at localhost:5432.
+      - "5432:5432"
+    volumes:
+      # Keep the data in a named Docker volume so it survives restarts.
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready asks Postgres "are you accepting connections?"; Docker marks
+      # the service "healthy" once it says yes.
+      test: ["CMD-SHELL", "pg_isready -U kuyruk -d kuyruk"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db-data:
