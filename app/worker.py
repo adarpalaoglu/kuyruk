@@ -39,7 +39,7 @@ from sqlmodel import Session, select
 
 from app.ai import AIBackend, PermanentAIError, TemporaryAIError, get_ai_backend
 from app.models import ItemState, Job, JobItem, JobState, Task, utc_now
-from app.normalise import hide_emails_and_phones, normalise, unicode_nfc
+from app.normalise import normalise, prepare_for_ai
 from app.settings import settings
 from app.states import change_item_state, change_job_state
 from app.tokens import count_tokens
@@ -64,16 +64,6 @@ def make_worker_id() -> str:
     machine. It lets Slice 8 see which worker had a job when it crashed.
     """
     return f"{socket.gethostname()}-{os.getpid()}-{uuid.uuid4().hex[:6]}"
-
-
-def prepare_for_ai(text: str) -> str:
-    """Hide emails and phone numbers before a text is sent to the AI (D50).
-
-    Only these two steps of `normalise` (NFC first, which the email pattern
-    needs, D49); case and spacing stay as the user wrote them, so the AI sees
-    the text as written, minus personal data.
-    """
-    return hide_emails_and_phones(unicode_nfc(text))
 
 
 def claim_next_job(session: Session, worker_id: str) -> Job | None:

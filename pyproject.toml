@@ -42,3 +42,6 @@ select = ["E", "F", "I", "B", "UP"]
 testpaths = ["tests"]
 # Always measure coverage (how much of app/ the tests run) and fail below 85%.
 addopts = "--cov=app --cov-report=term-missing --cov-fail-under=85"
+# Tests marked `postgres` need a real Postgres database (POSTGRES_TEST_URL);
+# they are skipped when it isn't set. Run only them with `pytest -m postgres`.
+markers = ["postgres: needs a real Postgres database (set POSTGRES_TEST_URL)"]

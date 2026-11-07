@@ -17,6 +17,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.auth import router as auth_router
+from app.budget import router as budget_router
 from app.db import create_db_and_tables
 from app.errors import install_error_handlers
 from app.jobs import router as jobs_router
@@ -50,6 +51,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(jobs_router)
+app.include_router(budget_router)
 install_error_handlers(app)
 
 # Middleware added later wraps the one added earlier, so the request-ID

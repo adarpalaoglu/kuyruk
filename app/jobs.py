@@ -7,6 +7,9 @@
   `GET /jobs/{ticket}/results` shows one row per text.
 - `POST /jobs/{ticket}/cancel` cancels a job that hasn't finished yet.
 
+`POST /jobs` also checks the daily AI budget for `llm` jobs
+(`enforce_daily_budget` below, with the budget rules in `app/budget.py`).
+
 Every route needs a logged-in user (`get_current_user` from `app/auth.py`).
 A *ticket* is the job's id, a UUID. Someone else's ticket is answered exactly
 like a ticket that doesn't exist (404), so nobody can learn which tickets exist.
@@ -20,6 +23,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.auth import SessionDep, get_current_user
+from app.budget import (
+    BudgetPass,
+    check_daily_budget,
+    check_too_big,
+    lock_user,
+    tokens_for_job,
+)
 from app.errors import ApiError
 from app.models import (
     Job,
@@ -28,6 +38,7 @@ from app.models import (
     JobItemPublic,
     JobPublic,
     JobState,
+    Task,
     User,
     utc_now,
 )
@@ -38,6 +49,13 @@ router = APIRouter(tags=["jobs"])
 
 # Shorthand for "this route needs a logged-in user".
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+# The optional Idempotency-Key header (double-click protection, D20). Both
+# `create_job` and `enforce_daily_budget` read it; FastAPI reads it once.
+IdempotencyKey = Annotated[
+    str | None,
+    Header(min_length=1, max_length=settings.idempotency_key_max_length),
+]
 
 
 def job_not_found() -> ApiError:
@@ -98,9 +116,17 @@ def ensure_same_content(session: Session, job: Job, new_job: JobCreate) -> None:
 
 
 def save_new_job(
-    session: Session, user: User, new_job: JobCreate, key: str | None
+    session: Session,
+    user: User,
+    new_job: JobCreate,
+    key: str | None,
+    budget_pass: BudgetPass | None,
 ) -> Job:
     """Save the job and all its texts in one transaction, and return the job.
+
+    An `llm` job comes with the `budget_pass` from `enforce_daily_budget`: its
+    token count, and the moment of the budget check, used as its creation
+    time so it counts on the day it was checked against. Other jobs get None.
 
     A *transaction* is a group of database changes that are saved all
     together or not at all: there is never a job with only some of its texts.
@@ -116,6 +142,9 @@ def save_new_job(
         total=len(new_job.texts),
         idempotency_key=key,
     )
+    if budget_pass is not None:
+        job.tokens_needed = budget_pass.tokens_needed
+        job.created_at = budget_pass.checked_at
     session.add(job)
     # The job's id is made in Python (a random UUID), so the texts can point at
     # it before anything is saved.
@@ -140,16 +169,53 @@ def save_new_job(
     return job
 
 
+def enforce_daily_budget(
+    new_job: JobCreate,
+    session: SessionDep,
+    user: CurrentUser,
+    idempotency_key: IdempotencyKey = None,
+) -> BudgetPass | None:
+    """Check an `llm` job against the daily budget; return its `BudgetPass`.
+
+    A FastAPI *dependency* of `POST /jobs`: it runs before the route, using the
+    same request body, session and user. It returns None when there is
+    nothing to count. Order (spec 3.1, D57-D62):
+
+    1. Only `llm` jobs use the AI, so other jobs are free: None.
+    2. A repeat of an already saved job (same Idempotency-Key) is not a new
+       job: no count, no check; the route returns the saved ticket (D60).
+    3. Count the tokens before locking, so the lock is held only briefly, and
+       refuse a job bigger than a whole day's budget at once (422, D62).
+    4. Lock the user (`lock_user`), so the check below and the route's save
+       are one step: a second job of the same user waits here until this one
+       is saved or refused (D14, D61).
+    5. Look for the key again: a double-click's twin may have been saved while
+       we waited for the lock, and it must get its ticket, not a 429.
+    6. Refuse (429) if today's use plus this job is over the budget.
+
+    The lock is let go when the route saves the job (commit) or when the
+    request ends without saving (the session is then rolled back).
+    """
+    if new_job.task != Task.LLM:
+        return None
+    if idempotency_key and find_job_by_key(session, user, idempotency_key):
+        return None
+    needed = tokens_for_job(new_job.texts)
+    check_too_big(needed)
+    lock_user(session, user)
+    if idempotency_key and find_job_by_key(session, user, idempotency_key):
+        return None
+    return check_daily_budget(session, user, needed)
+
+
 @router.post("/jobs", response_model=JobPublic, status_code=status.HTTP_202_ACCEPTED)
 def create_job(
     new_job: JobCreate,
     response: Response,
     session: SessionDep,
     user: CurrentUser,
-    idempotency_key: Annotated[
-        str | None,
-        Header(min_length=1, max_length=settings.idempotency_key_max_length),
-    ] = None,
+    budget_pass: Annotated[BudgetPass | None, Depends(enforce_daily_budget)],
+    idempotency_key: IdempotencyKey = None,
 ) -> Job:
     """Accept a new job and reply 202 with its ticket and a Location header.
 
@@ -160,12 +226,16 @@ def create_job(
     The optional `Idempotency-Key` header is double-click protection (D20):
     sending the same job again with the same key returns the same ticket
     instead of making a second job.
+
+    For `llm` jobs, `enforce_daily_budget` has already checked the budget and
+    counted the tokens; they are saved on the job as `tokens_needed`, with the
+    moment of the check as its `created_at`.
     """
     job = None
     if idempotency_key is not None:
         job = find_job_by_key(session, user, idempotency_key)
     if job is None:
-        job = save_new_job(session, user, new_job, idempotency_key)
+        job = save_new_job(session, user, new_job, idempotency_key, budget_pass)
     else:
         ensure_same_content(session, job, new_job)
     response.headers["Location"] = f"/jobs/{job.id}"

@@ -101,8 +101,15 @@ def describe_validation_error(error: dict) -> str:
 async def handle_validation_error(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
-    """Turn FastAPI's 422 "your input broke a rule" error into the error shape."""
-    message = "; ".join(describe_validation_error(error) for error in exc.errors())
+    """Turn FastAPI's 422 "your input broke a rule" error into the error shape.
+
+    The same problem can be reported more than once: on POST /jobs both the
+    route and its budget check (`enforce_daily_budget`) read the request body,
+    and FastAPI reports a broken body once for each. `dict.fromkeys` keeps the
+    first copy of each sentence, in order, and drops the repeats.
+    """
+    sentences = (describe_validation_error(error) for error in exc.errors())
+    message = "; ".join(dict.fromkeys(sentences))
     return error_response(
         status.HTTP_422_UNPROCESSABLE_CONTENT, "validation_error", message
     )

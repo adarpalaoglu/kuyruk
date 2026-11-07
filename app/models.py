@@ -11,9 +11,10 @@ is one table and each attribute is one column. The tables are:
 It also holds the *public shapes*: what a sign-up must contain (`UserCreate`),
 what a reply about a user may show (`UserPublic`), what a successful login
 returns (`Token`), what a new job must contain (`JobCreate`, with the job
-limits), and what a reply about a job or one of its texts may show
-(`JobPublic`, `JobItemPublic`). These are not tables; they only describe data
-going in and out of the API, so internal fields can never leak out.
+limits), what a reply about a job or one of its texts may show
+(`JobPublic`, `JobItemPublic`), and what the daily budget page shows
+(`BudgetPublic`). These are not tables; they only describe data going in and
+out of the API, so internal fields can never leak out.
 
 The fields follow `docs/spec.md` section 5; the allowed states follow section 4.
 Rules about which state may follow which are added in the worker slices, not
@@ -187,8 +188,9 @@ class Job(SQLModel, table=True):
     total: int = 0
     succeeded: int = 0
     failed: int = 0
-    # How many AI tokens this job needs. Empty (None) means "not counted yet";
-    # it is filled in by the daily budget check (Slice 6).
+    # How many AI tokens this job needs, counted by the daily budget check
+    # when the job is sent (app/budget.py). Only `llm` jobs use the AI, so only
+    # they get a number; for other jobs it stays empty (None).
     tokens_needed: int | None = None
     idempotency_key: str | None = None
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTCDateTime)
@@ -403,3 +405,17 @@ class JobItemPublic(SQLModel):
     result: str | None
     state: ItemState
     error_message: str | None
+
+
+class BudgetPublic(SQLModel):
+    """The reply of GET /me/budget: your daily AI token budget right now.
+
+    `limit` is the daily budget, `used` the tokens of today's counted `llm`
+    jobs, `left` what you can still send today (never below 0), and
+    `resets_at` the next midnight UTC, when `used` starts again from 0.
+    """
+
+    limit: int
+    used: int
+    left: int
+    resets_at: datetime

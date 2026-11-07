@@ -2,6 +2,7 @@
 
 The worker (Slice 5) calls `normalise` on each text of a `normalise` job. Each
 rule is one small function below, and `normalise` calls them in Adar's order.
+`prepare_for_ai` uses only the first two rules, for texts sent to the AI.
 The order matters. Letters are first stored one way (NFC), so an email
 containing a Turkish letter is always recognised; then personal details are
 hidden, before any step that could change them (D49).
@@ -56,6 +57,19 @@ def normalise(text: str) -> str:
     text = tidy_spaces(text)  # rule 3
     text = turkish_lowercase(text)  # rule 4
     return text
+
+
+def prepare_for_ai(text: str) -> str:
+    """Hide emails and phone numbers before a text is sent to the AI (D50).
+
+    Only these two steps of `normalise` (NFC first, which the email pattern
+    needs, D49); case and spacing stay as the user wrote them, so the AI sees
+    the text as written, minus personal data. It lives here, not in the
+    worker, because two places use it: the worker, before each AI call, and
+    the daily budget (app/budget.py), which counts the tokens of exactly what
+    the AI will receive (D57).
+    """
+    return hide_emails_and_phones(unicode_nfc(text))
 
 
 def hide_emails_and_phones(text: str) -> str:

@@ -121,6 +121,38 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 - **Why:** Two jobs sent at the same second could both see "5,000 left" and both pass, even though each check is correct on its own. Locking per user makes the second one wait until the first is counted. A test proves it.
 - **Date:** 5 Nov 2026 · **Status:** Approved (6 Nov 2026)
 
+### D57 — What the budget counts
+- **Decision:** a job's `tokens_needed` is the tokens of its texts exactly as the AI receives them: letters joined (NFC) and emails and phone numbers hidden (D50), counted with the same counter as `count_tokens` (`o200k_base`, D45). Only `llm` jobs get a number; cleaning and counting jobs leave it empty.
+- **Why:** The budget protects what the AI actually reads. A long email address the AI never sees shouldn't cost the user anything.
+- **Cost:** The fixed instruction and the AI's answers are not counted, so the real use is higher than the number shown. Stated in the limits.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D58 — Which jobs count towards today
+- **Decision:** the user's `llm` jobs created since today's midnight UTC, except jobs that ended without any AI work: cancelled while still queued, or failed before starting. A job cancelled while running counts in full.
+- **Why:** A job the worker never took never used the AI, so counting it would be unfair. Once a job has started, some of its texts have already gone to the AI.
+- **Cost:** There is no refund for the texts a job cancelled halfway never did.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D59 — How an over-budget job is refused
+- **Decision:** 429 with code `budget_exceeded`, a message such as "This job needs 12,000 tokens; you have 3,000 left today.", and a `Retry-After` header with the seconds until the next midnight UTC. Nothing is saved. A job that uses exactly what is left is accepted.
+- **Why:** 429 ("too many requests, try later") is what real AI providers send when a limit is reached, and Retry-After tells a program exactly when trying again can work. The limit is "up to", so reaching it exactly is allowed.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D60 — A repeated send is checked before the budget
+- **Decision:** a resend with the same Idempotency-Key and the same content returns the saved ticket without counting or checking the budget again. The key is looked up once before the lock and once more after it.
+- **Why:** A double-click must never cost twice (D20), and must not be refused just because the first click used up the budget. The second lookup catches a twin request that was saved while this one waited for the lock.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D61 — How the per-user lock works
+- **Decision:** on Postgres, the user's row is locked with `SELECT … FOR UPDATE` before the budget is added up; the lock lasts until the job is saved or refused. SQLite has no row locks, so there a write that changes nothing to the user's row takes SQLite's single whole-database write lock instead. Tokens are counted before taking the lock.
+- **Why:** Locking only one user's row means other users never wait. Counting first keeps the lock short. A test proves that without the lock two jobs sent at once both pass, and with it only one does.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D62 — A job bigger than the whole daily limit gets 422, not 429
+- **Decision:** if a job alone needs more tokens than the daily limit, it is refused before the daily check (no lock needed) with 422, code `job_exceeds_daily_budget`, a message such as "This job needs 340,000 tokens; the daily limit is 200,000. Split it into smaller jobs.", and no Retry-After.
+- **Why:** Such a job can never succeed, not even tomorrow. A 429 with Retry-After would wrongly suggest that waiting helps.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
 ---
 
 ## Job life

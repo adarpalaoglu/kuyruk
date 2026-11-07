@@ -65,9 +65,10 @@ The rest of Kuyruk must not know which backend it is talking to.
 Breaking a limit rejects the whole job immediately, with a clear message. Nothing is partly accepted.
 
 ### 3.1 Daily budget — HAND-DESIGNED
-- Before accepting an `llm` job, count its tokens (same tokenizer as `count_tokens`).
-- Tokens used today = sum of tokens of the user's `llm` jobs created today (UTC), excluding failed jobs that never started. Computed each time, never stored as a running total.
-- If used + this job > budget → reject with `budget_exceeded`: *"This job needs 12,000 tokens; you have 3,000 left today."*
+- Before accepting an `llm` job, count its tokens (same tokenizer as `count_tokens`), on the texts as the AI receives them (emails and phones hidden, D57). A repeat with the same Idempotency-Key and content is not counted or checked again (D60).
+- If the job alone needs more than the daily limit → reject with 422 `job_exceeds_daily_budget`: *"This job needs 340,000 tokens; the daily limit is 200,000. Split it into smaller jobs."*, no Retry-After (D62).
+- Tokens used today = sum of tokens of the user's `llm` jobs created today (UTC), excluding jobs that ended without any AI work (cancelled while queued, failed before starting) (D58). Computed each time, never stored as a running total.
+- If used + this job > budget → reject with 429 `budget_exceeded`: *"This job needs 12,000 tokens; you have 3,000 left today."*, with `Retry-After` = seconds until the next UTC midnight (D59).
 - **Check and reserve are one locked step per user** (Postgres row lock on the user, or an advisory lock), so two jobs sent at the same moment cannot both pass. Test: send two jobs at once that together exceed the budget; exactly one is accepted.
 
 ---

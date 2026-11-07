@@ -83,6 +83,11 @@ class Settings(BaseSettings):
     # someone still can't send gigabytes.
     max_request_bytes: int = 25 * 1024 * 1024
 
+    # The daily AI budget (spec 3.1, D11): how many tokens one user's `llm`
+    # jobs may need per UTC day (the day starts at midnight world time, not
+    # Turkish time). Cleaning and counting jobs are free.
+    daily_token_budget: int = Field(default=200_000, ge=1)
+
     # Token counting (app/tokens.py). The encoding is the rulebook that chops
     # text into tokens. Its file is kept inside the repo (app/data/), so
     # counting never needs the internet (D45).

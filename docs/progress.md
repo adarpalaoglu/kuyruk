@@ -3,7 +3,7 @@
 Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12 lists the slices).
 
 ## Current slice
-**Slice 6 — Budget + lock** (not started)
+**Slice 7 — SSE progress** (not started)
 
 ## Slices
 
@@ -15,7 +15,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 | 3 | Jobs API | ☑ | 147 tests, 99% coverage; real curl run on Postgres 16 |
 | 4 | Tasks + fake AI + Ollama client | ☑ | 245 tests, 99% coverage; real Gemma checked on 2 reviews |
 | 5 | Worker | ☑ | 330 tests, 99.8% coverage; real Gemma 5-text job and a live cancel checked on Postgres 16 |
-| 6 | Budget + lock | ☐ | |
+| 6 | Budget + lock | ☑ | 368 tests, 99% coverage; Postgres race test passes (and fails with the lock off); real curl run on Postgres 16 |
 | 7 | SSE progress | ☐ | |
 | 8 | Crash recovery + two workers | ☐ | |
 | 9 | Docker, compose, release workflow | ☐ | |
@@ -33,6 +33,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 - Entries D01–D41 drafted 5–6 Nov 2026 · Approved by Adar: ☑ (6 Nov 2026)
 - D44–D49 and the D04 wording update · Approved by Adar: ☑ (7 Nov 2026)
 - D50–D56 (worker and cancel) · Approved by Adar: ☑ (7 Nov 2026)
+- D57–D62 (daily budget) and the spec 3.1 wording update · Approved by Adar: ☑ (7 Nov 2026)
 
 ## Interface parity (fill in at slice 17)
 Everything on `/docs` can be done in the interface:
@@ -67,13 +68,21 @@ Slice 4 (limits for the README, and leftovers):
 Slice 5 (leftovers and notes):
 - **For Slice 8:** a stopped worker (Ctrl+C / SIGTERM) leaves its job `running`, with unfinished texts `waiting`. Nothing takes it over until Slice 8's recovery. Texts cut off after the 8 s grace may be done twice (D55, at least once).
 - **For Slice 9:** compose must give the worker a stop grace (`stop_grace_period`) above `SHUTDOWN_GRACE_SECONDS` (8 s); Docker's default is 10 s.
-- **For Adar to confirm:** "failed, AI unavailable" is used only when the 10-in-a-row rule actually stops texts from being started. If the 10th failure in a row happens when every text has already been started, every text has been tried, so the job is `done` (spec 4's definition of done), e.g. a 10-text job where all fail is "done, 0 succeeded, 10 failed".
 - With 4 at once, a cancel can let up to 3 texts beyond the "current" one finish: the worker may have started them a moment before the cancel arrived. They keep their results (seen in the manual check: 8 done at cancel, 12 ok at the end, 8 waiting).
 - `count_tokens` results are stored as the number written as text (e.g. "12"), because every result shares one text column.
 - The worker's database calls are short and run directly on its loop; only the AI calls are awaited. Fine for one job at a time; E1 measures the API, not the worker.
 - Local Postgres had old queued jobs from earlier manual checks; the worker picked them up and finished them on first start.
-- Code review fixes: a failed heartbeat is now logged and retried (before, one database blip stopped the job from ever being marked done); if an error ends a job early, texts still with the AI are stopped too (before, they kept running and changed the next job's failures-in-a-row count). Not changed: a job stopped by 10-in-a-row and then by Ctrl+C ends `failed` with the cut-off texts `waiting` (tries 0), the same as its never-tried texts.
+- Code review fixes: a failed heartbeat is now logged and retried (before, one database blip stopped the job from ever being marked done); if an error ends a job early, texts still with the AI are stopped too (before, they kept running and changed the next job's failures-in-a-row count).
 - Manual check (7 Nov 2026): real gemma4:e4b, 5 Turkish reviews, queued → running → done in 9.2 s (≈5 s of it the model warming up), all 5 ok; the email and phone in review 5 were hidden before the AI saw them.
+
+Slice 6 (limits for the README, and leftovers):
+- **Limit:** the budget counts only the texts as the AI receives them; the fixed instruction and the AI's answers are not counted, so real use is higher (D57). A job cancelled while running counts in full (D58).
+- **For Slice 9:** the Postgres race test (`tests/test_budget_postgres.py`, marked `postgres`) is skipped unless `POSTGRES_TEST_URL` is set. CI needs a Postgres service and that variable. Locally it uses a separate database, `kuyruk_test` (created once with `docker compose exec db createdb -U kuyruk kuyruk_test`), which the test wipes each run. Run it with `POSTGRES_TEST_URL=postgresql+psycopg://kuyruk:<password>@localhost:5432/kuyruk_test uv run pytest -m postgres`.
+- Lock proof (7 Nov 2026): with `lock_user` switched off by a throwaway plugin, the race test fails with `[202, 202]` (both accepted); with it on, `[202, 429]`.
+- Code review fix: a job checked just before midnight UTC but saved just after it counted on the new day, which never checked it (one job over budget possible). The job is now saved with the moment of the check as its `created_at`; test added.
+- `prepare_for_ai` moved from `app/worker.py` to `app/normalise.py`, so the worker and the budget use the same step.
+- On POST /jobs the body is read by both the route and `enforce_daily_budget`, so FastAPI reported a broken body twice; the 422 message now drops repeated sentences.
+- Manual check (7 Nov 2026, Postgres, `DAILY_TOKEN_BUDGET=100`): 4 jobs of 25 tokens accepted (exactly 100), the 5th refused with 429 and `Retry-After: 45009`; `/me/budget` went from 0 used to 100 used, 0 left; a 150-token job got 422 `job_exceeds_daily_budget`. Those 4 jobs are still queued in the local database; the worker will run them on its next start.
 
 ## Session log
 - 6 Nov 2026 — Planning finished in Claude app. Starting documents created. Tools installed. Decision log D01–D41 approved.
@@ -83,3 +92,4 @@ Slice 5 (leftovers and notes):
 - 6 Nov 2026 — Slice 3 done: `POST /jobs` (limits from settings, first broken text named by position, control characters except \n \t \r refused, lone surrogates refused, one transaction, 202 + Location, Idempotency-Key with 409 on different content and race handled by the unique rule), `GET /jobs/{ticket}`, `GET /jobs?status=&limit=&offset=`, `GET /jobs/{ticket}/results`; same 404 for other/missing/malformed tickets; `JobPublic`/`JobItemPublic`; one error shape for every error incl. 500 (`app/errors.py`); request ID + timing + safe 500 + 25 MB body limit with 413 (`app/middleware.py`); `tokens_needed` nullable. Login errors now use the shared shape.
 - 7 Nov 2026 — Slice 4 done: `normalise` (Adar's 6 rules, placeholders stay capital), `count_tokens` (tiktoken o200k_base, offline, checksum), AI interface with temporary/permanent errors, fake AI (fixed/replay, fail every Nth, temporary/permanent), Ollama client (think off, temperature 0, seed), `AI_BACKEND` switch (default fake). Manual check with real gemma4:e4b done. Review fixes: NFC first (D49); 429 and cut-off replies temporary (D47). D44–D49 approved.
 - 7 Nov 2026 — Slice 5 done: state rules in one place (`app/states.py`, conditional changes, D51), worker (`python -m app.worker`: claim with FOR UPDATE SKIP LOCKED, 4 texts at once, retries 1 s/2 s, 10-in-a-row stop, heartbeat, clean stop with 8 s grace), `POST /jobs/{ticket}/cancel` (200 / 409 `job_finished` / 404), emails and phones hidden before the AI (D50). D50–D56 approved; spec 2.3 updated.
+- 7 Nov 2026 — Slice 6 done: 10-in-a-row reading confirmed and Slice 5 review finding 3 accepted (both open items removed). Daily budget: `enforce_daily_budget` on POST /jobs (llm only; replay first; tokens on hidden text; 422 `job_exceeds_daily_budget` if bigger than the whole limit; per-user lock, FOR UPDATE on Postgres; 429 `budget_exceeded` + Retry-After), `GET /me/budget`, `DAILY_TOKEN_BUDGET` setting. Review fix: job saved with the check time (midnight edge). D57–D62 approved; spec 3.1 updated.

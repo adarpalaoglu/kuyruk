@@ -20,14 +20,13 @@ from sqlmodel import Session, select
 from app import worker as worker_module
 from app.ai import FakeAI, PermanentAIError, TemporaryAIError
 from app.models import ItemState, Job, JobItem, JobState, Task, User
-from app.normalise import normalise
+from app.normalise import normalise, prepare_for_ai
 from app.tokens import count_tokens
 from app.worker import (
     AI_UNAVAILABLE,
     INTERNAL_ERROR,
     Worker,
     claim_next_job,
-    prepare_for_ai,
 )
 
 pytestmark = pytest.mark.anyio
