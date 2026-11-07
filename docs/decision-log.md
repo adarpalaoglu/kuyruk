@@ -286,8 +286,8 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 
 ### D55 — A stopped worker waits at most 8 seconds for texts in progress
 - **Decision:** on Ctrl+C or a stop signal, the worker starts no new texts and waits at most `SHUTDOWN_GRACE_SECONDS` = 8 for texts already with the AI, then exits. Texts not finished by then stay waiting; the job is handed back (D76) and the next worker continues it, so those texts may be done twice ("at least once", D19). *(Wording updated 7 Nov 2026: before D76 the job was continued by crash recovery.)*
-- **Why:** Docker kills a container 10 seconds after asking it to stop, so a longer wait (e.g. the AI's 120-second timeout) would never really happen there. Compose must keep Docker's stop time above this setting (Slice 9).
-- **Date:** 7 Nov 2026, wording updated 7 Nov 2026 · **Status:** Approved (7 Nov 2026; update approved 7 Nov 2026)
+- **Why:** Docker kills a container 10 seconds after asking it to stop, so a longer wait (e.g. the AI's 120-second timeout) would never really happen there. compose.yaml therefore gives the worker a stop time of 12 seconds (`stop_grace_period`), above this setting. *(Updated 7 Nov 2026 in Slice 9: was "Compose must keep Docker's stop time above this setting (Slice 9)".)*
+- **Date:** 7 Nov 2026, wording updated 7 Nov 2026 (twice) · **Status:** Approved (7 Nov 2026; updates approved 7 Nov 2026)
 
 ### D56 — A bug inside a task fails only that text
 - **Decision:** if a task crashes because of a mistake in Kuyruk (not an AI error), that text is marked failed with "Internal error." and the worker carries on. The details go only to the worker's log.
@@ -402,6 +402,61 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 - **Why:** The project will be finished and frozen, so the tables won't change after release. A migration tool would add code and steps that never get used.
 - **Cost:** `create_all` never changes a table that already exists. During development, changing a table means wiping the local database (`docker compose down -v`). In a product that keeps changing after release, I would use Alembic.
 - **Date:** 6 Nov 2026 · **Status:** Approved (6 Nov 2026)
+
+### D77 — The production Dockerfile sits at the repo root; `docker/` is for E3
+- **Options:** `docker/Dockerfile` · `Dockerfile` at the root.
+- **Decision:** the one real Dockerfile is `Dockerfile` at the root. `docker/` holds only E3's four comparison Dockerfiles (Slice 13).
+- **Why:** `docker compose up` and anyone reading the repo find the real recipe where they expect it, and it can never be mixed up with the deliberately bad experiment versions.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D78 — Only the API creates the tables; the worker starts after the API is healthy
+- **Options:** both create tables on start · only the API does.
+- **Decision:** only the API runs `create_all` when it starts. The worker never creates tables; in compose it starts only once the API is healthy, and the API only answers `/health` after its start-up step has finished.
+- **Why:** Two programs creating the same tables at the same moment can collide on an empty database. With one owner, the order is simple and certain: database, then API (tables), then worker.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D79 — The worker's health check is an "I'm alive" file
+- **Options:** no health check · "is the process running" · "can it reach the database" · a file the worker keeps re-dating.
+- **Decision:** the worker re-dates a small file on every pass of its loop (about once a second when idle) and at every heartbeat (during a job). `python -m app.worker --check-alive` says healthy only while the file is younger than 30 seconds (`WORKER_ALIVE_MAX_AGE_SECONDS`).
+- **Why:** The worker is the container's first process, so if it dies the container stops anyway; "is it running" would prove nothing. Reaching the database says nothing about the worker itself. A fresh file proves the worker's loop is really turning, and a frozen worker shows up as unhealthy. Docker only reports unhealthy; restarting after a crash is done by `restart: unless-stopped`.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D80 — `docker compose up` is a demo with public demo-only secrets, refused outside demo mode
+- **Options:** require a `.env` before anything starts · demo values built into compose.
+- **Decision:** with no `.env`, compose fills in clearly labelled demo-only values: `DEMO_MODE=true`, the fake AI replaying waiting times, a demo database password and a demo `JWT_SECRET`. Kuyruk refuses to start with the demo `JWT_SECRET` unless `DEMO_MODE` is true. The database and API ports open only to this computer (127.0.0.1). For real use, a `.env` with real secrets and `DEMO_MODE=false` (documented in `.env.example`) wins over every demo value. Settings errors never repeat the values they were given, so a wrong setting can't print part of a secret.
+- **Why:** Anyone should be able to try Kuyruk with one command and nothing to fill in (spec 8). But the demo key is public, so anyone could forge a login pass with it; refusing it outside demo mode means it can never quietly end up in real use. Opening the ports only to this computer keeps other machines on the same network out of a database with a public password.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D81 — Demo timings: heartbeat 1 s, stuck after 5 s
+- **Decision:** in the Docker demo, `HEARTBEAT_SECONDS=1` and `STALE_AFTER_SECONDS=5`. Real use goes back to 5 s and 30 s (the defaults in `app/settings.py`), set in `.env`.
+- **Why:** With the real defaults, a crash is recovered about 30 seconds later, which is a long, empty wait in a demo or video. With 1 s / 5 s the recovery shows within seconds (the clean-machine check measured 5.1 s). The cost is one small database write per second per running job, fine for a demo.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D82 — Placeholder waiting times until Slice 10
+- **Decision:** until Slice 10 measures the real AI, the demo's fake AI replays `bench/data/placeholder_times.csv`: ten rough values between 0.5 and 1.1 seconds, the range seen once in the Slice 4 check. The file name and `bench/data/README.md` say it is not a measurement. Slice 10 replaces it with `ollama_times.csv` and deletes it.
+- **Why:** Replay mode needs a file to start at all, and the demo should feel like the real AI. Naming it "placeholder" means it can never be mistaken for measured data.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D83 — CI: Postgres tests in their own step; the uv cache can be switched off for E4
+- **Decision:** `ci.yml` runs a Postgres 16 service (same image as compose). The fast tests (with the 85% gate) and the Postgres tests (listed one by one) are two separate steps. A manual run (`gh workflow run ci.yml -f uv_cache=false`) can switch uv's download cache off; pushes and pull requests always use it.
+- **Why:** As separate steps, the log shows plainly that the Postgres tests ran and passed rather than being skipped. E4 needs about 10 runs with the cache off and 10 with it on; a manual switch gives those without dummy commits and without changing the workflow between runs.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D84 — The image is published only after CI passes for a push to main
+- **Options:** release on every push to main, alongside CI · run the tests again inside the release · start the release when CI finishes (`workflow_run`).
+- **Decision:** `release.yml` starts when the CI workflow completes, and publishes only if that CI run succeeded, was started by a push, on main, in this repository. It checks out and builds exactly the commit that CI tested (`head_sha`), never the newest commit on main.
+- **Why:** The tests run once, and a commit whose tests fail never gets an image. It is safe only because of those checks: like `pull_request_target` (D37), a `workflow_run` workflow runs with this repository's secrets and, here, permission to publish, even when the CI run it follows came from a stranger's pull request. So it must never act on a pull request run, and never build pull request code.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D85 — Image tags: the commit id and `latest`
+- **Decision:** each published image gets two tags: the full commit id, and `latest`. The image also carries standard labels: source (the repo), licence (MIT), revision (the commit id), title and description.
+- **Why:** The commit tag is exact and never moves: that image is that commit, forever. `latest` is convenient: always the newest image from main. The labels let GitHub link the image to the repo and let anyone trace any image back to its commit.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D86 — The clean-machine check runs on a copy without `.env`, under its own name
+- **Decision:** `scripts/clean_machine_check.py` copies the project's files (git's list, so no `.env`) into a temporary folder and runs everything under the Docker project name `kuyruk-check`. It removes that project's containers, volumes and images, builds with no cache, starts with `docker compose up`, uses Kuyruk like a visitor (sign up, log in, job, live progress, demo crash, recovery) and prints pass/fail per step, then removes everything again.
+- **Why:** My own `.env` and database would hide exactly the problems a first-time visitor would meet. A copy without `.env` behaves like a fresh download, and a separate project name means the check never touches my local data.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
 
 ---
 

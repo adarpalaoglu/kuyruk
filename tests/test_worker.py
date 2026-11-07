@@ -609,18 +609,97 @@ async def test_serve_stops_cleanly_on_a_stop_signal(engine):
     assert worker.stopping.is_set()
 
 
-def test_main_sets_up_and_runs_the_worker(monkeypatch, engine):
-    """`main` creates the tables and runs a worker on the app's database."""
+def test_main_runs_the_worker_without_creating_tables(monkeypatch, engine):
+    """`main` runs a worker on the app's database and never creates tables.
+
+    Only the API creates tables (D78), so the replaced `create_db_and_tables`
+    must never be called.
+    """
     import app.db
 
     served = []
+    created = []
 
     async def pretend_serve(worker):
         """Record the worker instead of running it."""
         served.append(worker)
 
     monkeypatch.setattr(app.db, "engine", engine)
-    monkeypatch.setattr(app.db, "create_db_and_tables", lambda: None)
+    monkeypatch.setattr(app.db, "create_db_and_tables", lambda: created.append(1))
     monkeypatch.setattr(worker_module, "serve", pretend_serve)
-    worker_module.main()
+    worker_module.main([])
     assert served[0].engine is engine
+    assert created == []
+
+
+async def test_idle_worker_keeps_the_alive_file_fresh(engine, tmp_path):
+    """With no job, every pass of the loop re-dates the alive file (D79)."""
+    alive = tmp_path / "alive"
+    worker = make_worker(engine, ScriptedAI(), alive_file=str(alive))
+    running = asyncio.create_task(worker.run_forever())
+    await asyncio.sleep(0.05)
+    first = alive.stat().st_mtime_ns
+    await asyncio.sleep(0.05)
+    worker.stop()
+    await asyncio.wait_for(running, timeout=1)
+    assert alive.stat().st_mtime_ns > first
+
+
+async def test_heartbeat_keeps_the_alive_file_fresh_during_a_job(
+    engine, session, tmp_path
+):
+    """During a job the main loop waits, so the heartbeat re-dates the file."""
+    alive = tmp_path / "alive"
+    dates = []
+
+    async def note_alive(text):
+        """Record the file's date at the start of each AI call."""
+        dates.append(alive.stat().st_mtime_ns if alive.exists() else None)
+
+    make_job(session, texts(3))
+    worker = make_worker(
+        engine,
+        ScriptedAI(wait=0.05, on_call=note_alive),
+        texts_at_once=1,
+        heartbeat_seconds=0.01,
+        alive_file=str(alive),
+    )
+    # run_one_job skips the main loop, so only the heartbeat writes the file.
+    await worker.run_one_job()
+    assert dates[0] is None
+    assert dates[1] is not None
+    assert dates[1] < dates[2]
+
+
+def test_unwritable_alive_file_is_logged_not_fatal(engine, tmp_path, caplog):
+    """A file that can't be written never stops the worker (D79)."""
+    worker = make_worker(
+        engine, ScriptedAI(), alive_file=str(tmp_path / "missing-folder" / "alive")
+    )
+    worker.mark_alive()
+    assert "Could not touch the alive file" in caplog.text
+
+
+def test_is_alive_needs_a_fresh_file(tmp_path):
+    """Fresh file: alive. Old, missing or no path: not alive."""
+    alive = tmp_path / "alive"
+    assert not worker_module.is_alive(str(alive), 30)
+    alive.touch()
+    assert worker_module.is_alive(str(alive), 30)
+    old = time.time() - 60
+    os.utime(alive, (old, old))
+    assert not worker_module.is_alive(str(alive), 30)
+    assert not worker_module.is_alive("", 30)
+
+
+@pytest.mark.parametrize("fresh, code", [(True, 0), (False, 1)])
+def test_check_alive_exits_with_docker_health_code(monkeypatch, tmp_path, fresh, code):
+    """`--check-alive` exits 0 (healthy) or 1 (unhealthy) and runs no worker."""
+    alive = tmp_path / "alive"
+    if fresh:
+        alive.touch()
+    monkeypatch.setattr(worker_module.settings, "worker_alive_file", str(alive))
+    monkeypatch.setattr(worker_module, "serve", None)
+    with pytest.raises(SystemExit) as stopped:
+        worker_module.main(["--check-alive"])
+    assert stopped.value.code == code
