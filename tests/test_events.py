@@ -325,17 +325,27 @@ def test_keep_alive_comment_when_nothing_changes(
 def test_stream_keeps_going_after_the_pass_expires(
     client, log_in_as, engine, monkeypatch
 ):
-    monkeypatch.setattr(settings, "access_token_minutes", 1 / 60)  # one second
+    # Two seconds. A pass's expiry is stored in whole seconds (the JWT
+    # standard), so it really lasts between 1 and 2 seconds: always long
+    # enough to send the job and open the stream first. (With one second it
+    # could last almost nothing, and the job was sometimes refused.)
+    monkeypatch.setattr(settings, "access_token_minutes", 2 / 60)
     headers = log_in_as("ayse")
     ticket = send_job(client, headers, count=1)
     token = headers["Authorization"].removeprefix("Bearer ")
 
     def wait_until_the_pass_expires(session, job_id):
         # Steps run on the stream's helper thread, so this wait freezes
-        # nothing else.
-        time.sleep(1.1)
-        with pytest.raises(jwt.ExpiredSignatureError):
-            read_access_token(token)
+        # nothing else. Look every 0.05 s until the pass is really expired
+        # (at most 3 s), rather than guessing a fixed wait.
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            try:
+                read_access_token(token)
+            except jwt.ExpiredSignatureError:
+                return
+            time.sleep(0.05)
+        pytest.fail("The login pass never expired.")
 
     play(
         monkeypatch, engine, [start, wait_until_the_pass_expires, text_ok, finish(DONE)]
