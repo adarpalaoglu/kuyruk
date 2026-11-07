@@ -82,6 +82,12 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 - **Why:** A fresh copy of Kuyruk works with nothing installed. I set `ollama` in my own `.env` for real work.
 - **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
 
+### D50 — The AI never sees emails or phone numbers
+- **Options:** send `llm` texts as written · run all six cleanup rules first · hide only emails and phone numbers first.
+- **Decision:** before an `llm` text goes to the AI, Kuyruk joins split letters (NFC, which the email pattern needs, D49) and hides emails and phone numbers with `[EMAIL]` and `[TELEFON]`. Nothing else changes: capitals and spacing stay as the user wrote them. The stored original text is not changed.
+- **Why:** My reason for hiding personal data (D31) is that it must not reach the AI. Sending texts as written would break that. Running all six rules would also change what the AI reads (lowercase, spacing) for no benefit.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
 ### D09 — Warm-up requests before measuring
 - **Decision:** send a few uncounted requests before every measurement.
 - **Why:** The first request loads the model into memory and is much slower. Counting it would make the AI look slower than it is.
@@ -136,6 +142,21 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 ### D18 — Stop a job after 10 failures in a row
 - **Why:** If the AI is switched off, every text would fail three times and waste minutes. Ten in a row means the AI is down, not that the texts are bad.
 - **Date:** 5 Nov 2026 · **Status:** Approved (6 Nov 2026)
+
+### D51 — State changes only happen "if the state is still what we expect"
+- **Decision:** every state change goes through one place that checks it against my table of allowed moves and refuses anything else as a bug. The change is written as "set it to done only if it is still running", which the database checks and does in one step.
+- **Why:** The API and the worker are separate programs changing the same job. If the user cancels at the moment the worker writes "done", a blind write would silently undo the cancel. With the condition, whoever writes first wins, so a cancel is never overwritten.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D52 — How cancel replies
+- **Decision:** a cancel replies 200 with the job. A job that has already finished (done, failed or cancelled, so cancelling twice too) gives 409 `job_finished`. The finish time is the moment of the cancel, even if a few texts already with the AI finish just after.
+- **Why:** The user sees at once that the cancel worked. A finished job can't be cancelled, and saying so is clearer than pretending it worked.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D54 — How "10 failures in a row" is counted
+- **Decision:** texts count in the order they *finish* (with 4 at once this can differ slightly from their position order). A text counts once, after its last try. Texts already with the AI when the limit is reached still finish and keep their results.
+- **Why:** The rule is there to notice that the AI is down. Finishing order is when Kuyruk actually learns about each failure, and throwing away answers that are already on their way would waste work.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
 
 ### D19 — Accept that one text may be done twice after a crash ("at least once")
 - **Why:** Preventing it completely is very hard. I measure how often it happens in E2 and state it in the limits.
@@ -198,6 +219,21 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 ### D30 — No Celery or Redis
 - **Why:** E2 is meant to show *when* you would need them. Adding them first would hide the problem I'm studying.
 - **Date:** 5 Nov 2026 · **Status:** Approved (6 Nov 2026)
+
+### D53 — The worker looks for new jobs every second
+- **Decision:** `WORKER_POLL_SECONDS` = 1.
+- **Why:** A job starts within a second, which feels instant to a user, and the check is one tiny database query.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D55 — A stopped worker waits at most 8 seconds for texts in progress
+- **Decision:** on Ctrl+C or a stop signal, the worker starts no new texts and waits at most `SHUTDOWN_GRACE_SECONDS` = 8 for texts already with the AI, then exits. Texts not finished by then stay waiting; the job stays running and is continued by crash recovery (Slice 8), so those texts may be done twice ("at least once", D19).
+- **Why:** Docker kills a container 10 seconds after asking it to stop, so a longer wait (e.g. the AI's 120-second timeout) would never really happen there. Compose must keep Docker's stop time above this setting (Slice 9).
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D56 — A bug inside a task fails only that text
+- **Decision:** if a task crashes because of a mistake in Kuyruk (not an AI error), that text is marked failed with "Internal error." and the worker carries on. The details go only to the worker's log.
+- **Why:** One bad text shouldn't stop the worker or the whole job, and the reply must not show how Kuyruk works inside.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
 
 ---
 

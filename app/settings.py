@@ -121,6 +121,26 @@ class Settings(BaseSettings):
     fake_ai_fail_every: int = Field(default=0, ge=0)
     fake_ai_fail_kind: Literal["temporary", "permanent"] = "temporary"
 
+    # The worker (app/worker.py, spec section 7). How often it looks for a new
+    # queued job, in seconds (D53).
+    worker_poll_seconds: float = Field(default=1.0, gt=0)
+    # How many texts of one job are worked on at the same time (D28).
+    texts_at_once: int = Field(default=4, ge=1)
+    # Tries per text for temporary AI errors (D16). The wait before the second
+    # try is retry_first_wait_seconds, and it doubles each time: 1 s, then 2 s.
+    max_tries_per_text: int = Field(default=3, ge=1)
+    retry_first_wait_seconds: float = Field(default=1.0, ge=0)
+    # Stop the whole job ("AI unavailable") after this many texts fail in a row
+    # (D18, D54).
+    stop_after_failures_in_a_row: int = Field(default=10, ge=1)
+    # How often a running job's last_active_at is refreshed, in seconds.
+    heartbeat_seconds: float = Field(default=5.0, gt=0)
+    # After a stop signal (Ctrl+C, or Docker stopping the container), how long
+    # the worker waits for texts already with the AI before it exits (D55).
+    # Docker kills a container 10 s after the stop signal, so this must stay
+    # below Docker's stop grace time.
+    shutdown_grace_seconds: float = Field(default=8.0, ge=0)
+
 
 # One shared copy, created once when the program starts, that the rest of the
 # code imports.

@@ -5,6 +5,7 @@
   worker (a separate process, built in Slice 5).
 - `GET /jobs/{ticket}` shows one job; `GET /jobs` lists your own jobs;
   `GET /jobs/{ticket}/results` shows one row per text.
+- `POST /jobs/{ticket}/cancel` cancels a job that hasn't finished yet.
 
 Every route needs a logged-in user (`get_current_user` from `app/auth.py`).
 A *ticket* is the job's id, a UUID. Someone else's ticket is answered exactly
@@ -28,8 +29,10 @@ from app.models import (
     JobPublic,
     JobState,
     User,
+    utc_now,
 )
 from app.settings import settings
+from app.states import JOB_TRANSITIONS, change_job_state
 
 router = APIRouter(tags=["jobs"])
 
@@ -211,4 +214,32 @@ def read_results(ticket: str, session: SessionDep, user: CurrentUser) -> list[Jo
         session.exec(
             select(JobItem).where(JobItem.job_id == job.id).order_by(JobItem.position)
         ).all()
+    )
+
+
+@router.post("/jobs/{ticket}/cancel", response_model=JobPublic)
+def cancel_job(ticket: str, session: SessionDep, user: CurrentUser) -> Job:
+    """Cancel one of your jobs that is still queued or running (D17, D52).
+
+    A queued job is cancelled at once. A running job is marked cancelled now;
+    the worker notices before it starts its next text. Texts already with the
+    AI finish and keep their results; texts not started stay waiting. A job
+    that has already finished (done, failed or cancelled) gives 409.
+    """
+    job = get_own_job(session, user, ticket)
+    # Keep trying while the rules allow "current state -> cancelled". The
+    # change only happens if the job is still in the state we just read; if
+    # the worker moved it meanwhile (e.g. queued -> running), read it again
+    # and try from the new state. States only move forward, so this ends.
+    while JobState.CANCELLED in JOB_TRANSITIONS.get(job.state, set()):
+        if change_job_state(
+            session, job.id, job.state, JobState.CANCELLED, finished_at=utc_now()
+        ):
+            session.refresh(job)
+            return job
+        session.refresh(job)
+    raise ApiError(
+        status.HTTP_409_CONFLICT,
+        "job_finished",
+        f"This job has already finished ({job.state}).",
     )

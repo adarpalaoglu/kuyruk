@@ -37,7 +37,7 @@ Tests must cover each rule with Turkish examples (ç/ğ/ı/İ/ö/ş/ü, no-diacr
 Count tokens with tiktoken, one fixed encoding (pin it in settings). Result: the integer count.
 
 ### 2.3 `llm`
-Send each text to the AI with one fixed instruction: *"Summarise this in one Turkish sentence. Reply with only that sentence."* Users cannot change the instruction. Result: the summary text.
+Send each text to the AI with one fixed instruction: *"Summarise this in one Turkish sentence. Reply with only that sentence."* Users cannot change the instruction. Before sending, emails and phone numbers are hidden (NFC, then rule 2 of 2.1; nothing else changes), so personal data never reaches the AI (D50). Result: the summary text.
 
 ### 2.4 The AI behind `llm`
 One setting chooses the AI: `AI_BACKEND = ollama | fake`.

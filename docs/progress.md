@@ -3,7 +3,7 @@
 Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12 lists the slices).
 
 ## Current slice
-**Slice 5 — Worker** (not started)
+**Slice 6 — Budget + lock** (not started)
 
 ## Slices
 
@@ -14,7 +14,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 | 2 | Auth | ☑ | 60 tests, 99% coverage; real register/login checked with curl |
 | 3 | Jobs API | ☑ | 147 tests, 99% coverage; real curl run on Postgres 16 |
 | 4 | Tasks + fake AI + Ollama client | ☑ | 245 tests, 99% coverage; real Gemma checked on 2 reviews |
-| 5 | Worker | ☐ | |
+| 5 | Worker | ☑ | 330 tests, 99.8% coverage; real Gemma 5-text job and a live cancel checked on Postgres 16 |
 | 6 | Budget + lock | ☐ | |
 | 7 | SSE progress | ☐ | |
 | 8 | Crash recovery + two workers | ☐ | |
@@ -32,6 +32,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 ## Decision log
 - Entries D01–D41 drafted 5–6 Nov 2026 · Approved by Adar: ☑ (6 Nov 2026)
 - D44–D49 and the D04 wording update · Approved by Adar: ☑ (7 Nov 2026)
+- D50–D56 (worker and cancel) · Approved by Adar: ☑ (7 Nov 2026)
 
 ## Interface parity (fill in at slice 17)
 Everything on `/docs` can be done in the interface:
@@ -63,6 +64,17 @@ Slice 4 (limits for the README, and leftovers):
 - Ollama errors after review (D47): 429 and a reply that breaks off halfway are temporary, like timeouts, unreachable and 5xx.
 - `httpx` moved from test-only to a main library (the Ollama client uses it); `tiktoken==0.14.0` added.
 
+Slice 5 (leftovers and notes):
+- **For Slice 8:** a stopped worker (Ctrl+C / SIGTERM) leaves its job `running`, with unfinished texts `waiting`. Nothing takes it over until Slice 8's recovery. Texts cut off after the 8 s grace may be done twice (D55, at least once).
+- **For Slice 9:** compose must give the worker a stop grace (`stop_grace_period`) above `SHUTDOWN_GRACE_SECONDS` (8 s); Docker's default is 10 s.
+- **For Adar to confirm:** "failed, AI unavailable" is used only when the 10-in-a-row rule actually stops texts from being started. If the 10th failure in a row happens when every text has already been started, every text has been tried, so the job is `done` (spec 4's definition of done), e.g. a 10-text job where all fail is "done, 0 succeeded, 10 failed".
+- With 4 at once, a cancel can let up to 3 texts beyond the "current" one finish: the worker may have started them a moment before the cancel arrived. They keep their results (seen in the manual check: 8 done at cancel, 12 ok at the end, 8 waiting).
+- `count_tokens` results are stored as the number written as text (e.g. "12"), because every result shares one text column.
+- The worker's database calls are short and run directly on its loop; only the AI calls are awaited. Fine for one job at a time; E1 measures the API, not the worker.
+- Local Postgres had old queued jobs from earlier manual checks; the worker picked them up and finished them on first start.
+- Code review fixes: a failed heartbeat is now logged and retried (before, one database blip stopped the job from ever being marked done); if an error ends a job early, texts still with the AI are stopped too (before, they kept running and changed the next job's failures-in-a-row count). Not changed: a job stopped by 10-in-a-row and then by Ctrl+C ends `failed` with the cut-off texts `waiting` (tries 0), the same as its never-tried texts.
+- Manual check (7 Nov 2026): real gemma4:e4b, 5 Turkish reviews, queued → running → done in 9.2 s (≈5 s of it the model warming up), all 5 ok; the email and phone in review 5 were hidden before the AI saw them.
+
 ## Session log
 - 6 Nov 2026 — Planning finished in Claude app. Starting documents created. Tools installed. Decision log D01–D41 approved.
 - 6 Nov 2026 — Slice 0 done: uv project (Python 3.12, exact pins + `uv.lock`), folders, `app/settings.py`, `/health` + tests, `.env.example`, `.gitignore`, MIT licence, placeholder README, `ci.yml` (ruff + pytest, 85% gate).
@@ -70,3 +82,4 @@ Slice 4 (limits for the README, and leftovers):
 - 6 Nov 2026 — Slice 2 built (awaiting review/commit): D42 added; open items on `task` list and D42 closed; SQLite now enforces foreign keys (tests + app). D43 added. Auth: `/register` (201, 409, 422; lowercase usernames, D43), `/token` (OAuth2 password flow, JWT via PyJWT, same 401 and same work for wrong password/unknown user; passwords over the maximum refused at once, a review fix), `get_current_user`; Argon2 hashing via pwdlib (FastAPI docs' recommendation); `UserCreate`/`UserPublic`/`Token`; auth settings + `.env.example`.
 - 6 Nov 2026 — Slice 3 done: `POST /jobs` (limits from settings, first broken text named by position, control characters except \n \t \r refused, lone surrogates refused, one transaction, 202 + Location, Idempotency-Key with 409 on different content and race handled by the unique rule), `GET /jobs/{ticket}`, `GET /jobs?status=&limit=&offset=`, `GET /jobs/{ticket}/results`; same 404 for other/missing/malformed tickets; `JobPublic`/`JobItemPublic`; one error shape for every error incl. 500 (`app/errors.py`); request ID + timing + safe 500 + 25 MB body limit with 413 (`app/middleware.py`); `tokens_needed` nullable. Login errors now use the shared shape.
 - 7 Nov 2026 — Slice 4 done: `normalise` (Adar's 6 rules, placeholders stay capital), `count_tokens` (tiktoken o200k_base, offline, checksum), AI interface with temporary/permanent errors, fake AI (fixed/replay, fail every Nth, temporary/permanent), Ollama client (think off, temperature 0, seed), `AI_BACKEND` switch (default fake). Manual check with real gemma4:e4b done. Review fixes: NFC first (D49); 429 and cut-off replies temporary (D47). D44–D49 approved.
+- 7 Nov 2026 — Slice 5 done: state rules in one place (`app/states.py`, conditional changes, D51), worker (`python -m app.worker`: claim with FOR UPDATE SKIP LOCKED, 4 texts at once, retries 1 s/2 s, 10-in-a-row stop, heartbeat, clean stop with 8 s grace), `POST /jobs/{ticket}/cancel` (200 / 409 `job_finished` / 404), emails and phones hidden before the AI (D50). D50–D56 approved; spec 2.3 updated.
