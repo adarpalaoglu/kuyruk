@@ -3,7 +3,7 @@
 Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12 lists the slices).
 
 ## Current slice
-**Slice 8 — Crash recovery + two workers** (not started)
+**Slice 9 — Docker, compose, release workflow** (not started). Slice 8 done.
 
 ## Slices
 
@@ -17,7 +17,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 | 5 | Worker | ☑ | 330 tests, 99.8% coverage; real Gemma 5-text job and a live cancel checked on Postgres 16 |
 | 6 | Budget + lock | ☑ | 368 tests, 99% coverage; Postgres race test passes (and fails with the lock off); real curl run on Postgres 16 |
 | 7 | SSE progress | ☑ | 394 tests, 99% coverage; real 20-text fake-AI job watched live with curl on Postgres 16 |
-| 8 | Crash recovery + two workers | ☐ | |
+| 8 | Crash recovery + two workers | ☑ | 454 tests (5 on Postgres), 99.9% coverage; real kill -9 run on Postgres 16: 20/20 ok, crash count 1, 4 texts redone |
 | 9 | Docker, compose, release workflow | ☐ | |
 | 10 | Measure the real AI | ☐ | |
 | 11 | E1 | ☐ | Prediction written? ☐ |
@@ -35,6 +35,8 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 - D50–D56 (worker and cancel) · Approved by Adar: ☑ (7 Nov 2026)
 - D57–D62 (daily budget) and the spec 3.1 wording update · Approved by Adar: ☑ (7 Nov 2026)
 - D63–D67 (live progress) and the spec 6.1 wording update · Approved by Adar: ☑ (7 Nov 2026)
+- D68–D75 (crash recovery) and the spec 5 update (two new Job fields) · Approved by Adar: ☑ (7 Nov 2026); D74 update (crash mark also checked before each text) approved 7 Nov 2026
+- D76 (polite stop hands the job back) and the D55 / D70 wording updates, from the Slice 8 code review · Approved by Adar: ☑ (7 Nov 2026)
 
 ## Interface parity (fill in at slice 17)
 Everything on `/docs` can be done in the interface:
@@ -67,7 +69,7 @@ Slice 4 (limits for the README, and leftovers):
 - `httpx` moved from test-only to a main library (the Ollama client uses it); `tiktoken==0.14.0` added.
 
 Slice 5 (leftovers and notes):
-- **For Slice 8:** a stopped worker (Ctrl+C / SIGTERM) leaves its job `running`, with unfinished texts `waiting`. Nothing takes it over until Slice 8's recovery. Texts cut off after the 8 s grace may be done twice (D55, at least once).
+- **For Slice 8:** a stopped worker (Ctrl+C / SIGTERM) leaves its job `running`, with unfinished texts `waiting`. Nothing takes it over until Slice 8's recovery. Texts cut off after the 8 s grace may be done twice (D55, at least once). *(Done in Slice 8: the job is now handed back and picked up at once, D76.)*
 - **For Slice 9:** compose must give the worker a stop grace (`stop_grace_period`) above `SHUTDOWN_GRACE_SECONDS` (8 s); Docker's default is 10 s.
 - With 4 at once, a cancel can let up to 3 texts beyond the "current" one finish: the worker may have started them a moment before the cancel arrived. They keep their results (seen in the manual check: 8 done at cancel, 12 ok at the end, 8 waiting).
 - `count_tokens` results are stored as the number written as text (e.g. "12"), because every result shares one text column.
@@ -95,6 +97,19 @@ Slice 7 (limits for the README, and leftovers):
 - The timing log still measures until the stream *starts* (about 4 ms), not its full length.
 - Manual check (7 Nov 2026, Postgres, fake AI 2 s per text, 4 at once): `curl -N` showed snapshot `queued` 0/20, `running` 1 s later, progress 2, 4, 8, 12, 16, 20 about every 2 s, then `state: done` and `end: done` 12 s after opening; headers included `text/event-stream`, `cache-control: no-cache` and the request ID. The 4 queued jobs left from Slice 6 ran first.
 
+Slice 8 (limits for the README, and leftovers):
+- **For Slice 9:** in demo mode, use shorter heartbeat and stale times (e.g. heartbeat 1 s, stale after 5 s) so the recovery is visible within seconds in the demo video; with the defaults (5 s / 30 s) it takes about 30 s.
+- **For Slice 9:** start the worker in Docker with Python directly (`python -m app.worker`), not through `uv run`. Found in the manual check: `kill -9` on `uv run python -m app.worker` killed only `uv`; the real worker carried on and finished the job. Docker sends its stop and kill signals to the container's first process, so that must be the worker itself.
+- **For Slice 9:** CI needs the Postgres service for `tests/test_recovery_postgres.py` too (two real worker processes, a takeover race, a real `kill -9`); like the budget test it is skipped without `POSTGRES_TEST_URL`. It uses heartbeat 0.2 s and stale 1.5 s and takes about 10 s.
+- **Limit (at least once, D19):** after a crash, up to `TEXTS_AT_ONCE` (4) texts can be done twice: those that were with the AI at the crash. Measured in E2; the manual check redid 4 of 20.
+- **Limit:** a job is noticed as stuck only after the stale time (30 s by default) without a heartbeat; until then nothing happens. A worker that loses the database for over 30 s can have its job taken over while still alive; it then stops starting texts and never finishes the job (D72).
+- **Limit:** a job failed for crashing too often keeps its finished texts; its waiting texts stay waiting.
+- Heartbeat and stuck check use the database's clock (D68). On SQLite the time is written in the same text format Kuyruk stores times in (milliseconds plus "000"), so times compare and match correctly.
+- The demo crash comes at the worker's next heartbeat or before its next text, whichever is first. A mark left on a job that finished just before the worker saw it does nothing. The `/demo/crash-worker` address appears on `/docs` only when demo mode is on.
+- Code review fixes: (1) old Postgres databases lack the two new columns: no code change, the D42 cost; wipe once with `docker compose down -v` (done locally). (2) A polite stop counted as a crash: now the worker hands the job back and the next one picks it up at once, crash count unchanged (D76, Adar's choice); tests on SQLite and with a real SIGTERM on Postgres.
+- Local Postgres was wiped once for the two new columns (`docker compose down -v`, D42); `kuyruk_test` was created again. The demo check left one 8-text job `running` at 4 of 8 (user `mehmet`): the next worker start will take it over (crash count 1) and finish it.
+- Manual check (7 Nov 2026, Postgres, fake AI 2 s per text, 4 at once, default 5 s heartbeat / 30 s stale): 20-text job, worker 1 killed with `kill -9` at 7 s with 12 ok; job stayed `running` at 12/20; worker 2 started at once and took it over 28 s later ("taken over ... (crash 1)"); stream showed progress 4, 8, 12, keep-alive, `recovered {"from_position": 13}`, progress 16, 20, `state: done`, `end: done`. Final: done, 20 ok, 0 failed, crash count 1, every text 1 try; texts 13–16 were started by both workers (24 starts for 20 texts). Demo endpoint: 404 `not_found` with demo mode off (even logged in); in demo mode 409 `no_running_job` with no running job, and 202 with a running job; the worker exited (code 1, no "stopped" line) 2.2 s later.
+
 ## Session log
 - 6 Nov 2026 — Planning finished in Claude app. Starting documents created. Tools installed. Decision log D01–D41 approved.
 - 6 Nov 2026 — Slice 0 done: uv project (Python 3.12, exact pins + `uv.lock`), folders, `app/settings.py`, `/health` + tests, `.env.example`, `.gitignore`, MIT licence, placeholder README, `ci.yml` (ruff + pytest, 85% gate).
@@ -105,3 +120,4 @@ Slice 7 (limits for the README, and leftovers):
 - 7 Nov 2026 — Slice 5 done: state rules in one place (`app/states.py`, conditional changes, D51), worker (`python -m app.worker`: claim with FOR UPDATE SKIP LOCKED, 4 texts at once, retries 1 s/2 s, 10-in-a-row stop, heartbeat, clean stop with 8 s grace), `POST /jobs/{ticket}/cancel` (200 / 409 `job_finished` / 404), emails and phones hidden before the AI (D50). D50–D56 approved; spec 2.3 updated.
 - 7 Nov 2026 — Slice 6 done: 10-in-a-row reading confirmed and Slice 5 review finding 3 accepted (both open items removed). Daily budget: `enforce_daily_budget` on POST /jobs (llm only; replay first; tokens on hidden text; 422 `job_exceeds_daily_budget` if bigger than the whole limit; per-user lock, FOR UPDATE on Postgres; 429 `budget_exceeded` + Retry-After), `GET /me/budget`, `DAILY_TOKEN_BUDGET` setting. Review fix: job saved with the check time (midnight edge). D57–D62 approved; spec 3.1 updated.
 - 7 Nov 2026 — Slice 7 built (awaiting review/commit): POST /jobs body and Idempotency-Key now read once (`CheckedJob`), de-duplication removed from the 422 handler, test proves each error appears once. `GET /jobs/{ticket}/events` with FastAPI's built-in SSE: login + 404 checked once at open, snapshot, changes only (look every 0.5 s), `end` with final state, keep-alive after 15 quiet seconds, stops at once on disconnect, short sessions on helper threads. Settings `EVENTS_POLL_SECONDS`, `EVENTS_KEEPALIVE_SECONDS`. D63–D67 approved; spec 6.1 updated.
+- 7 Nov 2026 — Slice 8 done: crash recovery (`take_over_stuck_job`: stuck = no heartbeat for 30 s by the database's clock, stuck jobs before queued, compare-and-swap takeover, at most 3 takeovers then failed "Crashed too many times", continues with waiting texts only), tries saved after each finished attempt, a worker that lost its job stops, "text started" log line for E2, `recovered` event, `POST /demo/crash-worker` with `DEMO_MODE` (default false), settings `STALE_AFTER_SECONDS`, `MAX_CRASH_COUNT`, `DEMO_MODE`. Postgres tests: two worker processes on 30 jobs, takeover race, real `kill -9`, real SIGTERM. D68–D75 and spec 5 update approved. Review: a polite stop now hands the job back (D76, approved).

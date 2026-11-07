@@ -14,21 +14,23 @@ A stream reply is plain text: blocks separated by an empty line, each with an
 import json
 import time
 import uuid
+from datetime import timedelta
 
 import anyio
 import jwt
 import pytest
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlmodel import Session, SQLModel, create_engine
 
 from app import events
 from app.db import get_engine, get_session
 from app.events import recovered_event
 from app.main import app
-from app.models import Job, JobState, utc_now
+from app.models import ItemState, Job, JobItem, JobState, utc_now
 from app.security import read_access_token
 from app.settings import settings
-from app.states import change_job_state
+from app.states import change_item_state, change_job_state
+from app.worker import take_over_stuck_job
 
 QUEUED, RUNNING = JobState.QUEUED, JobState.RUNNING
 DONE, FAILED, CANCELLED = JobState.DONE, JobState.FAILED, JobState.CANCELLED
@@ -486,7 +488,7 @@ def test_event_text_matches_spec_exactly(client, log_in_as, engine, monkeypatch)
 
 
 def test_recovered_event_format():
-    """Defined now, sent from Slice 8: `{"from_position": 212}`."""
+    """Exactly spec 6.1: `{"from_position": 212}`."""
     event = recovered_event(212)
     assert event.event == "recovered"
     assert event.data == {"from_position": 212}
@@ -513,3 +515,127 @@ def test_get_engine_gives_the_apps_engine():
     from app import db
 
     assert db.get_engine() is db.engine
+
+
+# --- Recovery after a crash (D73) ---
+
+
+def first_text_ok(session, job_id):
+    """The worker finishes text 1 (the text row and the job's count)."""
+    item_id = session.scalar(
+        select(JobItem.id).where(JobItem.job_id == job_id, JobItem.position == 1)
+    )
+    change_item_state(session, item_id, ItemState.WAITING, ItemState.OK, result="x")
+    text_ok(session, job_id)
+
+
+def worker_dies(session, job_id):
+    """The worker stops beating: its last heartbeat is a minute old."""
+    session.execute(
+        update(Job)
+        .where(Job.id == job_id)
+        .values(
+            claimed_by="dead-worker", last_active_at=utc_now() - timedelta(seconds=60)
+        )
+    )
+    session.commit()
+
+
+def taken_over(session, job_id):
+    """Another worker finds the job stuck and takes it over (the real code)."""
+    assert take_over_stuck_job(session, "w2", stale_after_seconds=30).id == job_id
+
+
+def taken_over_and_finished(session, job_id):
+    """In one look: taken over, the last text done, and the job done."""
+    taken_over(session, job_id)
+    text_ok(session, job_id)
+    finish(DONE)(session, job_id)
+
+
+def crashed_too_often(session, job_id):
+    """Another worker finds it stuck once too often and fails it."""
+    assert take_over_stuck_job(session, "w2", max_crash_count=0) is None
+
+
+def test_takeover_sends_recovered_with_the_first_waiting_position(
+    client, log_in_as, engine, monkeypatch
+):
+    """Text 1 done, crash, takeover: `recovered` from position 2, then on to done."""
+    headers = log_in_as("ayse")
+    ticket = send_job(client, headers, count=3)
+    play(
+        monkeypatch,
+        engine,
+        [start, first_text_ok, worker_dies, taken_over, text_ok, text_ok, finish(DONE)],
+    )
+    assert parse(stream(client, headers, ticket).text) == [
+        ("state", {"state": "queued"}),
+        progress(0, 0, 3),
+        ("state", {"state": "running"}),
+        progress(1, 0, 3),
+        ("recovered", {"from_position": 2}),
+        progress(2, 0, 3),
+        progress(3, 0, 3),
+        ("state", {"state": "done"}),
+        ("end", {"state": "done"}),
+    ]
+
+
+def test_recovered_comes_before_progress_and_state_in_one_look(
+    client, log_in_as, engine, monkeypatch
+):
+    """Takeover, a text and "done" in one look: recovered, progress, state."""
+    headers = log_in_as("ayse")
+    ticket = send_job(client, headers, count=1)
+    set_up(engine, ticket, start, worker_dies)
+    play(monkeypatch, engine, [taken_over_and_finished])
+    assert parse(stream(client, headers, ticket).text) == [
+        ("state", {"state": "running"}),
+        progress(0, 0, 1),
+        ("recovered", {"from_position": 1}),
+        progress(1, 0, 1),
+        ("state", {"state": "done"}),
+        ("end", {"state": "done"}),
+    ]
+
+
+def test_nothing_waiting_gives_a_null_position(client, log_in_as, engine, monkeypatch):
+    """Crash after the last text, before "done": `from_position` is null."""
+    headers = log_in_as("ayse")
+    ticket = send_job(client, headers, count=1)
+    set_up(engine, ticket, start, first_text_ok, worker_dies)
+    play(monkeypatch, engine, [taken_over, finish(DONE)])
+    assert parse(stream(client, headers, ticket).text)[2:] == [
+        ("recovered", {"from_position": None}),
+        ("state", {"state": "done"}),
+        ("end", {"state": "done"}),
+    ]
+
+
+def test_no_recovered_when_the_job_fails_for_crashing(
+    client, log_in_as, engine, monkeypatch
+):
+    """Failed instead of resumed: just the failed state and the end."""
+    headers = log_in_as("ayse")
+    ticket = send_job(client, headers, count=2)
+    set_up(engine, ticket, start, worker_dies)
+    play(monkeypatch, engine, [crashed_too_often])
+    assert parse(stream(client, headers, ticket).text) == [
+        ("state", {"state": "running"}),
+        progress(0, 0, 2),
+        ("state", {"state": "failed"}),
+        ("end", {"state": "failed"}),
+    ]
+
+
+def test_joining_after_a_recovery_sends_no_recovered(
+    client, log_in_as, engine, monkeypatch
+):
+    """The snapshot is only state + progress (D64), even after a takeover."""
+    headers = log_in_as("ayse")
+    ticket = send_job(client, headers, count=2)
+    set_up(engine, ticket, start, worker_dies, taken_over)
+    play(monkeypatch, engine, [finish(DONE)])
+    names = [name for name, _ in parse(stream(client, headers, ticket).text)]
+    assert "recovered" not in names

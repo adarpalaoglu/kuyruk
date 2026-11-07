@@ -20,9 +20,10 @@ a cancel from the API can never be overwritten by the worker's final "done".
 """
 
 import uuid
+from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import update
+from sqlalchemy import ColumnElement, update
 from sqlmodel import Session
 
 from app.models import ItemState, Job, JobItem, JobState
@@ -60,21 +61,25 @@ def change_job_state(
     job_id: uuid.UUID,
     from_state: JobState,
     to_state: JobState,
+    *,
+    only_if: Sequence[ColumnElement[bool]] = (),
     **fields: Any,
 ) -> bool:
     """Move one job from `from_state` to `to_state`, only if it is still there.
 
     `fields` are other columns to set in the same step, e.g. `finished_at`.
+    `only_if` adds more conditions that must also still hold, e.g. "still
+    claimed by this worker" (D72) or "nothing changed since we looked" (D69).
     Returns True if the job changed, or False if its state had already moved on
-    (someone else got there first); in that case nothing is changed at all.
-    The change is saved (committed) at once.
+    or a condition no longer held (someone else got there first); in that case
+    nothing is changed at all. The change is saved (committed) at once.
     """
     check_allowed(JOB_TRANSITIONS, from_state, to_state)
     # One UPDATE ... WHERE id = ? AND state = ?: the condition and the change
     # happen together inside the database, so nobody can slip in between.
     statement = (
         update(Job)
-        .where(Job.id == job_id, Job.state == from_state)
+        .where(Job.id == job_id, Job.state == from_state, *only_if)
         .values(state=to_state, **fields)
     )
     changed = session.execute(statement).rowcount == 1

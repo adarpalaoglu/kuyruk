@@ -12,8 +12,8 @@ The event format is HAND-DESIGNED by Adar (spec 6.1, D64):
 - `state`     `{"state": "running"}`, on every state change;
 - `progress`  `{"done": .., "total": .., "succeeded": .., "failed": ..}`,
   after texts finish (at most once per look; it may cover several texts);
-- `recovered` `{"from_position": 212}`, when a job resumes after a crash
-  (defined here, sent from Slice 8);
+- `recovered` `{"from_position": 212}`, when a job resumes after a crash:
+  another worker took it over and carries on from that text (D73);
 - `end`       `{"state": "done"}`, the final state; then the stream closes.
 
 How a stream runs:
@@ -23,7 +23,8 @@ How a stream runs:
    only here, so the stream keeps going even if the login pass expires (D65).
 2. `watch_job` sends a snapshot (`state` + `progress`), then looks at the job
    in the database every `EVENTS_POLL_SECONDS` and sends only what changed
-   (D63). After `EVENTS_KEEPALIVE_SECONDS` without a message it sends a
+   (D63), including a takeover after a crash (the crash count went up).
+   After `EVENTS_KEEPALIVE_SECONDS` without a message it sends a
    comment line (`: keep-alive`), which clients ignore but which stops
    networks from closing a quiet connection (D66). When the job reaches done,
    failed or cancelled it sends `end`, and the stream closes.
@@ -63,6 +64,10 @@ class JobSnapshot(NamedTuple):
     total: int
     succeeded: int
     failed: int
+    # Goes up by 1 each time another worker takes the job over (D70).
+    crash_count: int
+    # The first waiting text when it was last taken over (D73).
+    resumed_from_position: int | None
 
 
 def state_event(state: JobState) -> ServerSentEvent:
@@ -86,10 +91,11 @@ def progress_event(snapshot: JobSnapshot) -> ServerSentEvent:
     )
 
 
-def recovered_event(from_position: int) -> ServerSentEvent:
+def recovered_event(from_position: int | None) -> ServerSentEvent:
     """The `recovered` event: the job resumed after a crash, at this text.
 
-    Part of the format now; crash recovery (Slice 8) is what sends it.
+    `from_position` is None (`null`) if no text was left waiting: the crash
+    came after the last text but before the job was marked done (D73).
     """
     return ServerSentEvent(event="recovered", data={"from_position": from_position})
 
@@ -112,21 +118,26 @@ def is_final(state: JobState) -> bool:
 def read_job_snapshot(engine: Engine, job_id: uuid.UUID) -> JobSnapshot | None:
     """Read the job's state and counts with a short session of its own.
 
-    Only four columns are read, and the session (with its database
+    Only a few columns are read, and the session (with its database
     connection) is closed straight after, so an open stream never holds a
     connection between looks. Returns None if the job is gone. (Kuyruk never
     deletes jobs, but a stream must not crash if one disappears.)
     """
     with Session(engine) as session:
         row = session.exec(
-            select(Job.state, Job.total, Job.succeeded, Job.failed).where(
-                Job.id == job_id
-            )
+            select(
+                Job.state,
+                Job.total,
+                Job.succeeded,
+                Job.failed,
+                Job.crash_count,
+                Job.resumed_from_position,
+            ).where(Job.id == job_id)
         ).first()
     if row is None:
         return None
-    state, total, succeeded, failed = row
-    return JobSnapshot(JobState(state), total, succeeded, failed)
+    state, *rest = row
+    return JobSnapshot(JobState(state), *rest)
 
 
 async def look(engine: Engine, job_id: uuid.UUID) -> JobSnapshot | None:
@@ -164,8 +175,14 @@ async def watch_job(
         if now is None:
             return
         sent_something = False
-        # Progress first, then state: the texts counted here finished before
-        # the job changed state (e.g. the last text, then "done").
+        # Order (D64, D73): recovered, then progress, then state. A takeover
+        # happens before the new worker's texts finish, and the texts counted
+        # here finished before the job changed state (e.g. the last text, then
+        # "done"). No `recovered` if the job failed instead of resuming
+        # (crashed too many times).
+        if now.crash_count > last.crash_count and now.state != JobState.FAILED:
+            yield recovered_event(now.resumed_from_position)
+            sent_something = True
         if (now.succeeded, now.failed, now.total) != (
             last.succeeded,
             last.failed,

@@ -285,13 +285,63 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 - **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
 
 ### D55 — A stopped worker waits at most 8 seconds for texts in progress
-- **Decision:** on Ctrl+C or a stop signal, the worker starts no new texts and waits at most `SHUTDOWN_GRACE_SECONDS` = 8 for texts already with the AI, then exits. Texts not finished by then stay waiting; the job stays running and is continued by crash recovery (Slice 8), so those texts may be done twice ("at least once", D19).
+- **Decision:** on Ctrl+C or a stop signal, the worker starts no new texts and waits at most `SHUTDOWN_GRACE_SECONDS` = 8 for texts already with the AI, then exits. Texts not finished by then stay waiting; the job is handed back (D76) and the next worker continues it, so those texts may be done twice ("at least once", D19). *(Wording updated 7 Nov 2026: before D76 the job was continued by crash recovery.)*
 - **Why:** Docker kills a container 10 seconds after asking it to stop, so a longer wait (e.g. the AI's 120-second timeout) would never really happen there. Compose must keep Docker's stop time above this setting (Slice 9).
-- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+- **Date:** 7 Nov 2026, wording updated 7 Nov 2026 · **Status:** Approved (7 Nov 2026; update approved 7 Nov 2026)
 
 ### D56 — A bug inside a task fails only that text
 - **Decision:** if a task crashes because of a mistake in Kuyruk (not an AI error), that text is marked failed with "Internal error." and the worker carries on. The details go only to the worker's log.
 - **Why:** One bad text shouldn't stop the worker or the whole job, and the reply must not show how Kuyruk works inside.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+---
+
+## Crash recovery
+
+### D68 — A job is stuck when its heartbeat is 30 seconds old, by the database's clock
+- **Decision:** a `running` job whose `last_active_at` is older than `STALE_AFTER_SECONDS` = 30 is stuck. The heartbeat (every 5 s) runs beside the texts, not between them, so a text that waits a long time for the AI never stops it. Every heartbeat write and the "is it stuck?" check use the database's own current time, never a worker's clock. Kuyruk refuses to start if the stale time is not longer than the heartbeat time.
+- **Why:** This is how a slow job is told from a stuck one: a slow job keeps beating; only a dead or frozen worker stops. With one clock (the database's), a worker whose own clock is wrong can neither make a healthy job look stuck nor hide a stuck one. A stale time no longer than the heartbeat would make every healthy job look stuck between two beats.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D69 — Stuck jobs first; taking over is one compare-and-swap
+- **Decision:** on start and on every poll, a worker first looks for a stuck job, and only if there is none claims a queued job. It takes a stuck job over with one change that the database makes only if the job is still running with the same `last_active_at` and `claimed_by` the worker just read ("compare-and-swap"). On Postgres the look also skips rows another worker has locked (`FOR UPDATE SKIP LOCKED`).
+- **Why:** A stuck job has already waited at least 30 seconds and someone may be watching it. With the compare-and-swap, if two workers try at the same moment, the first change goes through and the second matches nothing, so two workers can never both take the same job.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D70 — At most 3 takeovers, then the job fails
+- **Decision:** every takeover adds 1 to `crash_count`. A job may be taken over at most `MAX_CRASH_COUNT` = 3 times. The 4th time it is found stuck, it is not taken over: it becomes `failed` with "Crashed too many times" (its crash count shows 4). Texts already finished keep their results. A job handed back after a polite stop (D76) is not a crash and doesn't count.
+- **Why:** A job that keeps killing its worker (for example a text that makes the worker run out of memory) would otherwise crash every worker forever. Three chances is enough for ordinary crashes.
+- **Date:** 7 Nov 2026, last sentence added 7 Nov 2026 · **Status:** Approved (7 Nov 2026; update approved 7 Nov 2026)
+
+### D71 — A try counts when it finishes, and is saved at once
+- **Decision:** each finished attempt at a text (an answer or an error) adds 1 to that text's `tries` in the database straight away. An attempt cut off by a crash never finished, so it doesn't count. A text taken over after a crash gets only the tries it has left (3 in total).
+- **Why:** A crash is not the text's fault, so it must not use up a try. Saving each finished try means a text can't get more than 3 real tries just because its worker crashed in between.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D72 — A worker that lost its job stops; the first saved answer wins
+- **Decision:** before each text, a worker checks that the job is still running and still has its name in `claimed_by`. If another worker has taken it over (for example after this worker lost the database for over 30 seconds), it starts no more texts and never marks the job done or failed. A text's answer is saved only if the text is still waiting, so if two workers finish the same text, only the first answer is kept and counted.
+- **Why:** A worker can look dead without being dead. These checks make sure the two never both work through the job, and that counts are never doubled.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D73 — Details of the `recovered` event (completes spec 6.1)
+- **Decision:** at takeover, the worker saves the lowest waiting position on the job (`resumed_from_position`). The live stream sends `recovered` `{"from_position": N}` when it sees the crash count go up. In one look the order is `recovered`, then `progress`, then `state`. It is not sent when the job failed for crashing too often. If nothing was waiting (the crash came after the last text but before "done"), `from_position` is `null`. Someone who connects after a recovery gets only the usual snapshot.
+- **Why:** The takeover happens before the new worker's texts finish, and those finish before the job's state changes. A job that failed did not resume. Saving the position at takeover gives the exact text where work restarted, not a guess made later.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D74 — How the demo crash works
+- **Decision:** `POST /demo/crash-worker` (demo mode only, login required) puts a "crash requested" mark on the caller's oldest running job in the database and replies 202 with its ticket. The worker running that job checks the mark at every heartbeat and before starting each text and, if it is in demo mode too, exits at once with no clean-up (`os._exit`, like a power cut). The worker that takes over clears the mark. Outside demo mode the address answers 404, before the login check. With no running job: 409 `no_running_job`.
+- **Why:** The API and the worker are separate programs (in Docker, separate containers) and can't send each other signals, but both share the database. Only the caller's own job, and only its worker, is affected. A real crash runs no clean-up, so the demo must not either. 404 outside demo mode means nobody learns the address exists. A crash with nothing running would show nothing. Checking before each text too (added 7 Nov 2026, after the manual check): with the heartbeat alone, a job that finished within one heartbeat (an 8-text job took 4 s) never crashed.
+- **Date:** 7 Nov 2026, check before each text added 7 Nov 2026 · **Status:** Approved (7 Nov 2026; update approved 7 Nov 2026)
+
+### D75 — One log line per text started, for E2
+- **Decision:** each time a worker starts a text, it writes one line: `text started job=<ticket> position=<n> worker=<worker id>`. A retry is not a new start.
+- **Why:** E2 must count redone texts. A text started twice (by two workers) is a redone text, so counting repeated job + position pairs in the logs gives the number exactly, without extra database writes.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D76 — A polite stop hands the job back; it is not a crash
+- **Options:** treat a polite stop like a crash (wait 30 s, crash count +1) · hand the job back.
+- **Decision:** when a worker is stopped politely (Ctrl+C, or Docker stopping its container) and texts are still left after its 8-second grace (D55), it removes its name from the job (`claimed_by` empty); the job stays `running`. The next worker picks up a running job with no name at its next poll, without waiting for the stale time, before any queued job. The crash count stays the same and no `recovered` event is sent. Texts cut off after the grace may still be done twice (D19).
+- **Why:** The code review found that otherwise restarting the worker during a long job (e.g. `docker compose restart`) used up one of its 3 allowed takeovers each time, so a job that never crashed could fail with "Crashed too many times". A polite stop is not a crash, and handing the job back also lets work continue within a second instead of 30.
 - **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
 
 ---

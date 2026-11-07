@@ -92,11 +92,11 @@ Allowed transitions only; anything else is a bug and must be rejected by code an
 
 **User:** id, username (unique), hashed_password, created_at.
 
-**Job:** id (ticket, UUID), owner_id, task, state, total, succeeded, failed, tokens_needed, idempotency_key (nullable, unique per owner), created_at, started_at, finished_at, last_active_at, crash_count, claimed_by (worker id, nullable), error_message.
+**Job:** id (ticket, UUID), owner_id, task, state, total, succeeded, failed, tokens_needed, idempotency_key (nullable, unique per owner), created_at, started_at, finished_at, last_active_at, crash_count, claimed_by (worker id, nullable), error_message, crash_requested (demo crash mark, D74), resumed_from_position (nullable, for the `recovered` event, D73).
 
 **JobItem (a "text"):** id, job_id, position (1…N), original_text, result, state, tries, error_message.
 
-Results live in the same row as their text. `last_active_at` is updated every heartbeat while the job runs; if it is older than "stale after", the job is stuck, not still working.
+Results live in the same row as their text. `last_active_at` is updated every heartbeat while the job runs, with the database's own clock (D68); if it is older than "stale after", the job is stuck, not still working.
 
 Public reply models (`UserPublic`, `JobPublic`, `JobItemPublic`) expose only safe fields. A test proves `hashed_password` never appears in any reply.
 

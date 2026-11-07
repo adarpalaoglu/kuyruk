@@ -8,7 +8,7 @@ name in capitals, e.g. `database_url` is read from `DATABASE_URL`.
 
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -145,12 +145,38 @@ class Settings(BaseSettings):
     # Docker kills a container 10 s after the stop signal, so this must stay
     # below Docker's stop grace time.
     shutdown_grace_seconds: float = Field(default=8.0, ge=0)
+    # Crash recovery (spec 7.1, D68-D70). A running job whose last heartbeat
+    # is older than stale_after_seconds is *stuck*: its worker has died or
+    # frozen, and another worker may take it over. A job may be taken over at
+    # most max_crash_count times; the next time it is stuck, it fails.
+    stale_after_seconds: float = Field(default=30.0, gt=0)
+    max_crash_count: int = Field(default=3, ge=0)
 
     # Live progress (GET /jobs/{ticket}/events, app/events.py, spec 6.1). How
     # often an open stream looks at its job in the database, in seconds (D63),
     # and after how many quiet seconds it sends a keep-alive line (D66).
     events_poll_seconds: float = Field(default=0.5, gt=0)
     events_keepalive_seconds: float = Field(default=15.0, gt=0)
+
+    # Demo mode (spec 8). When true, POST /demo/crash-worker is switched on,
+    # so a worker crash can be caused on purpose and the recovery watched
+    # (D74). Off by default: outside demo mode that address answers 404.
+    demo_mode: bool = False
+
+    @model_validator(mode="after")
+    def check_stale_after_heartbeat(self) -> "Settings":
+        """Refuse to start if a healthy job could look stuck (D68).
+
+        A job is stuck when its heartbeat is older than stale_after_seconds.
+        If that were not longer than the time between two heartbeats, every
+        job would look stuck between two beats, and workers would take over
+        jobs that are still being worked on.
+        """
+        if self.stale_after_seconds <= self.heartbeat_seconds:
+            raise ValueError(
+                "STALE_AFTER_SECONDS must be bigger than HEARTBEAT_SECONDS."
+            )
+        return self
 
 
 # One shared copy, created once when the program starts, that the rest of the

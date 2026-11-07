@@ -29,7 +29,18 @@ from typing import Annotated, Any, Literal
 
 from pydantic import StringConstraints, field_validator
 from pydantic_core import PydanticCustomError
-from sqlalchemy import DateTime, Dialect, Enum, TypeDecorator, UniqueConstraint
+from sqlalchemy import (
+    DateTime,
+    Dialect,
+    Enum,
+    Float,
+    TypeDecorator,
+    UniqueConstraint,
+    literal,
+)
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.sql.compiler import SQLCompiler
+from sqlalchemy.sql.functions import FunctionElement
 from sqlmodel import Field, SQLModel
 
 from app.settings import settings
@@ -80,6 +91,52 @@ class UTCDateTime(TypeDecorator):
         if value.tzinfo is None:
             return value.replace(tzinfo=UTC)
         return value.astimezone(UTC)
+
+
+class DbNow(FunctionElement):
+    """The database's own current time, optionally moved by some seconds.
+
+    Used for heartbeats and for the "is this job stuck?" check (D68), so that
+    every worker reads the same clock: the database's. A worker whose own
+    clock is wrong can then neither make a healthy job look stuck nor a stuck
+    one look healthy. Use it through `db_now()` below.
+
+    A *FunctionElement* is a piece of SQL that SQLAlchemy writes into a query.
+    The two functions after this class say how to write it for each database.
+    """
+
+    type = UTCDateTime()
+    # Tells SQLAlchemy queries using this are safe to remember (cache).
+    inherit_cache = True
+
+
+def db_now(offset_seconds: float = 0.0) -> DbNow:
+    """The database's current time, plus `offset_seconds` (negative = earlier).
+
+    E.g. `db_now(-30)` is "30 seconds ago, by the database's clock".
+    """
+    return DbNow(literal(offset_seconds, Float()))
+
+
+@compiles(DbNow, "postgresql")
+def db_now_on_postgres(element: DbNow, compiler: SQLCompiler, **kw: Any) -> str:
+    """On Postgres: now(), moved by the offset turned into a time interval."""
+    return f"(now() + make_interval(secs => {compiler.process(element.clauses, **kw)}))"
+
+
+@compiles(DbNow, "sqlite")
+def db_now_on_sqlite(element: DbNow, compiler: SQLCompiler, **kw: Any) -> str:
+    """On SQLite: its own clock, written exactly as Kuyruk stores times.
+
+    SQLite keeps times as text such as "2026-11-07 10:00:05.123456". Its
+    clock gives milliseconds ("05.123"), so "000" is added to make the same
+    six digits. Same format means times compare correctly as text, and a
+    time read back and written again matches exactly (needed by the
+    takeover's "only if nothing changed" check, D69). The offset becomes a
+    modifier such as "-30.000000 seconds".
+    """
+    offset = compiler.process(element.clauses, **kw)
+    return f"strftime('%Y-%m-%d %H:%M:%f000', 'now', printf('%f seconds', {offset}))"
 
 
 class Task(StrEnum):
@@ -197,12 +254,22 @@ class Job(SQLModel, table=True):
     started_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
     finished_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
     # Updated on every heartbeat (a regular "I'm still working" signal) while
-    # the job runs; if it gets too old, the job is stuck, not still working.
+    # the job runs, with the database's own clock (D68); if it gets too old,
+    # the job is stuck, not still working.
     last_active_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
+    # How many times another worker has taken this job over after a crash
+    # (D70).
     crash_count: int = 0
     # Which worker process has taken this job; empty while nobody has.
     claimed_by: str | None = None
     error_message: str | None = None
+    # Demo mode only: set by POST /demo/crash-worker to tell the worker running
+    # this job to exit abruptly (D74). The worker that takes over clears it.
+    crash_requested: bool = False
+    # The first waiting text's position when the job was last taken over after
+    # a crash; the live progress stream sends it in its `recovered` event
+    # (D73). Empty if never taken over, or if nothing was left waiting.
+    resumed_from_position: int | None = None
 
 
 class JobItem(SQLModel, table=True):
@@ -376,7 +443,8 @@ class JobPublic(SQLModel):
     """The only shape Kuyruk uses to reply about a job.
 
     It leaves out the worker-only fields (owner_id, claimed_by, crash_count,
-    last_active_at) and the idempotency key, which are internal. `id` is the
+    last_active_at, crash_requested, resumed_from_position) and the
+    idempotency key, which are internal. `id` is the
     job's ticket.
     """
 

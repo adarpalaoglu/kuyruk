@@ -144,7 +144,9 @@ def test_claim_takes_oldest_queued_job_and_records_worker(session):
     assert claimed.state == JobState.RUNNING
     assert claimed.claimed_by == "w1"
     assert claimed.started_at is not None
-    assert claimed.last_active_at == claimed.started_at
+    # The heartbeat time comes from the database's clock (D68), so it is
+    # close to, not exactly, the start time from the worker's clock.
+    assert abs((claimed.last_active_at - claimed.started_at).total_seconds()) < 1
 
 
 def test_claim_skips_jobs_that_are_not_queued(session):
