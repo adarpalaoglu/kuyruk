@@ -127,10 +127,10 @@ Rules:
 
 ### 6.1 SSE event format — HAND-DESIGNED
 Events, each as JSON:
-- `progress`: `{"done": 212, "total": 500, "succeeded": 210, "failed": 2}` (after each finished text)
+- `progress`: `{"done": 212, "total": 500, "succeeded": 210, "failed": 2}` (after texts finish; at most once per look, may cover several texts)
 - `state`: `{"state": "running"}` (on every state change)
 - `recovered`: `{"from_position": 212}` (when a job resumes after a crash)
-- `end`: final state; then the stream closes.
+- `end`: `{"state": "done"}` (the final state); then the stream closes.
 The stream keeps going even if the login pass expires during it.
 
 ---

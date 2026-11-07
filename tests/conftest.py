@@ -25,7 +25,7 @@ from sqlmodel import Session, SQLModel, create_engine  # noqa: E402
 
 # Importing the models registers the tables so `create_all` below can make them.
 from app import models  # noqa: E402, F401
-from app.db import enforce_sqlite_foreign_keys, get_session  # noqa: E402
+from app.db import enforce_sqlite_foreign_keys, get_engine, get_session  # noqa: E402
 from app.main import app  # noqa: E402
 
 
@@ -63,7 +63,9 @@ def client(engine: Engine) -> Iterator[TestClient]:
 
     `dependency_overrides` swaps one dependency for another: every route that
     asks for `get_session` gets a session on the in-memory test database
-    instead of the real one. The swap is undone after the test.
+    instead of the real one, and every route that asks for `get_engine` (the
+    live progress stream) gets the test database's engine. The swap is undone
+    after the test.
     """
 
     def get_test_session() -> Iterator[Session]:
@@ -72,6 +74,7 @@ def client(engine: Engine) -> Iterator[TestClient]:
             yield test_session
 
     app.dependency_overrides[get_session] = get_test_session
+    app.dependency_overrides[get_engine] = lambda: engine
     yield TestClient(app)
     app.dependency_overrides.clear()
 

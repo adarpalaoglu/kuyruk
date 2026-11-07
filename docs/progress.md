@@ -3,7 +3,7 @@
 Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12 lists the slices).
 
 ## Current slice
-**Slice 7 — SSE progress** (not started)
+**Slice 8 — Crash recovery + two workers** (not started)
 
 ## Slices
 
@@ -16,7 +16,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 | 4 | Tasks + fake AI + Ollama client | ☑ | 245 tests, 99% coverage; real Gemma checked on 2 reviews |
 | 5 | Worker | ☑ | 330 tests, 99.8% coverage; real Gemma 5-text job and a live cancel checked on Postgres 16 |
 | 6 | Budget + lock | ☑ | 368 tests, 99% coverage; Postgres race test passes (and fails with the lock off); real curl run on Postgres 16 |
-| 7 | SSE progress | ☐ | |
+| 7 | SSE progress | ☑ | 394 tests, 99% coverage; real 20-text fake-AI job watched live with curl on Postgres 16 |
 | 8 | Crash recovery + two workers | ☐ | |
 | 9 | Docker, compose, release workflow | ☐ | |
 | 10 | Measure the real AI | ☐ | |
@@ -34,6 +34,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 - D44–D49 and the D04 wording update · Approved by Adar: ☑ (7 Nov 2026)
 - D50–D56 (worker and cancel) · Approved by Adar: ☑ (7 Nov 2026)
 - D57–D62 (daily budget) and the spec 3.1 wording update · Approved by Adar: ☑ (7 Nov 2026)
+- D63–D67 (live progress) and the spec 6.1 wording update · Approved by Adar: ☑ (7 Nov 2026)
 
 ## Interface parity (fill in at slice 17)
 Everything on `/docs` can be done in the interface:
@@ -81,8 +82,18 @@ Slice 6 (limits for the README, and leftovers):
 - Lock proof (7 Nov 2026): with `lock_user` switched off by a throwaway plugin, the race test fails with `[202, 202]` (both accepted); with it on, `[202, 429]`.
 - Code review fix: a job checked just before midnight UTC but saved just after it counted on the new day, which never checked it (one job over budget possible). The job is now saved with the moment of the check as its `created_at`; test added.
 - `prepare_for_ai` moved from `app/worker.py` to `app/normalise.py`, so the worker and the budget use the same step.
-- On POST /jobs the body is read by both the route and `enforce_daily_budget`, so FastAPI reported a broken body twice; the 422 message now drops repeated sentences.
+- On POST /jobs the body is read by both the route and `enforce_daily_budget`, so FastAPI reported a broken body twice; the 422 message now drops repeated sentences. *(Fixed properly in Slice 7: only `enforce_daily_budget` reads the body and the Idempotency-Key and hands them to the route (`CheckedJob`); the de-duplication was removed.)*
 - Manual check (7 Nov 2026, Postgres, `DAILY_TOKEN_BUDGET=100`): 4 jobs of 25 tokens accepted (exactly 100), the 5th refused with 429 and `Retry-After: 45009`; `/me/budget` went from 0 used to 100 used, 0 left; a 150-token job got 422 `job_exceeds_daily_budget`. Those 4 jobs are still queued in the local database; the worker will run them on its next start.
+
+Slice 7 (limits for the README, and leftovers):
+- **For Slice 17:** browsers' built-in `EventSource` can't send an Authorization header, so the interface must read the stream with `fetch` and send the header. Never put the login pass in the URL (D67).
+- **For Slice 8:** `recovered_event` in `app/events.py` is ready; recovery must make the stream send it (the stream currently only notices state and counts).
+- **Limit:** the stream finds changes by looking at the database twice a second (D63). Simple, works on SQLite and Postgres; costs one tiny query per open stream per look, and up to 0.5 s delay. Postgres LISTEN/NOTIFY would avoid the looking, but only works on Postgres.
+- **Limit:** one `progress` can cover several texts, and a state that lasts less than half a second can be skipped (e.g. a tiny job going queued → done shows no `running`).
+- **Limit:** FastAPI's built-in SSE also has its own fixed 15-second `: ping` (not a setting). Kuyruk's own keep-alive normally comes first, so a rare extra `: ping` line is possible; clients ignore both.
+- **For E1 (Slice 11):** each look is a short read on FastAPI's helper threads (shared with plain `def` routes, about 40), so very many open streams take a little thread time, never a thread per stream. The login check's session is closed before streaming, so a stream holds no database connection between looks (test with a one-connection database proves it).
+- The timing log still measures until the stream *starts* (about 4 ms), not its full length.
+- Manual check (7 Nov 2026, Postgres, fake AI 2 s per text, 4 at once): `curl -N` showed snapshot `queued` 0/20, `running` 1 s later, progress 2, 4, 8, 12, 16, 20 about every 2 s, then `state: done` and `end: done` 12 s after opening; headers included `text/event-stream`, `cache-control: no-cache` and the request ID. The 4 queued jobs left from Slice 6 ran first.
 
 ## Session log
 - 6 Nov 2026 — Planning finished in Claude app. Starting documents created. Tools installed. Decision log D01–D41 approved.
@@ -93,3 +104,4 @@ Slice 6 (limits for the README, and leftovers):
 - 7 Nov 2026 — Slice 4 done: `normalise` (Adar's 6 rules, placeholders stay capital), `count_tokens` (tiktoken o200k_base, offline, checksum), AI interface with temporary/permanent errors, fake AI (fixed/replay, fail every Nth, temporary/permanent), Ollama client (think off, temperature 0, seed), `AI_BACKEND` switch (default fake). Manual check with real gemma4:e4b done. Review fixes: NFC first (D49); 429 and cut-off replies temporary (D47). D44–D49 approved.
 - 7 Nov 2026 — Slice 5 done: state rules in one place (`app/states.py`, conditional changes, D51), worker (`python -m app.worker`: claim with FOR UPDATE SKIP LOCKED, 4 texts at once, retries 1 s/2 s, 10-in-a-row stop, heartbeat, clean stop with 8 s grace), `POST /jobs/{ticket}/cancel` (200 / 409 `job_finished` / 404), emails and phones hidden before the AI (D50). D50–D56 approved; spec 2.3 updated.
 - 7 Nov 2026 — Slice 6 done: 10-in-a-row reading confirmed and Slice 5 review finding 3 accepted (both open items removed). Daily budget: `enforce_daily_budget` on POST /jobs (llm only; replay first; tokens on hidden text; 422 `job_exceeds_daily_budget` if bigger than the whole limit; per-user lock, FOR UPDATE on Postgres; 429 `budget_exceeded` + Retry-After), `GET /me/budget`, `DAILY_TOKEN_BUDGET` setting. Review fix: job saved with the check time (midnight edge). D57–D62 approved; spec 3.1 updated.
+- 7 Nov 2026 — Slice 7 built (awaiting review/commit): POST /jobs body and Idempotency-Key now read once (`CheckedJob`), de-duplication removed from the 422 handler, test proves each error appears once. `GET /jobs/{ticket}/events` with FastAPI's built-in SSE: login + 404 checked once at open, snapshot, changes only (look every 0.5 s), `end` with final state, keep-alive after 15 quiet seconds, stops at once on disconnect, short sessions on helper threads. Settings `EVENTS_POLL_SECONDS`, `EVENTS_KEEPALIVE_SECONDS`. D63–D67 approved; spec 6.1 updated.

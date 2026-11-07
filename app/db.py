@@ -6,7 +6,9 @@ Three things live here:
   pool of open connections to it, so each request doesn't have to reconnect;
 - `create_db_and_tables`, which makes any missing tables when Kuyruk starts;
 - `get_session`, which gives each web request its own *session* (one
-  conversation with the database: reads, writes, and saving them together).
+  conversation with the database: reads, writes, and saving them together);
+- `get_engine`, for code that opens its own short sessions, such as a live
+  progress stream that looks at the database again and again.
 """
 
 from collections.abc import Iterator
@@ -81,3 +83,15 @@ def get_session() -> Iterator[Session]:
     """
     with Session(engine) as session:
         yield session
+
+
+def get_engine() -> Engine:
+    """Give a route the engine itself, so it can open its own short sessions.
+
+    A live progress stream (`app/events.py`) stays open for minutes, so it
+    can't keep one session for all that time: the session would hold one of
+    the pool's few connections the whole while. Instead it opens a new session
+    for each quick look and closes it at once. Being a dependency, tests can
+    swap it for their own test database, just like `get_session`.
+    """
+    return engine

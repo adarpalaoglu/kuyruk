@@ -232,6 +232,33 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 - **Cost:** Turkish users can't use ç, ğ, ı, ö, ş, ü in usernames (ayşe must sign up as ayse). The texts inside jobs aren't affected; they keep every Turkish letter.
 - **Date:** 6 Nov 2026 · **Status:** Approved (6 Nov 2026)
 
+### D63 — Live progress by looking at the database twice a second
+- **Decision:** an open progress stream looks at its job in the database every `EVENTS_POLL_SECONDS` = 0.5 and sends only what changed.
+- **Why:** It works the same on SQLite and Postgres and needs very little code; half a second feels live.
+- **Cost:** one tiny query per open stream per look; quick changes can be merged into one event or skipped (a tiny job may go from queued to done with no `running` in between). Postgres LISTEN/NOTIFY (the database tells you when something changes) would avoid the looking, but only works on Postgres.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D64 — Event details (HAND-DESIGNED, completes spec 6.1)
+- **Decision:** on connect, a snapshot: one `state` and one `progress` with the current counts. After that, only changes. If both change in one look, `progress` comes before `state`. `end` carries `{"state": "<final state>"}` and comes after the final `state`. A job already finished when you connect gets the snapshot and `end` at once. No event numbers: a client that reconnects simply gets a new snapshot.
+- **Why:** Someone joining halfway sees where the job is at once; the texts counted in one look finished before the state changed; a new snapshot makes reconnecting simple and always correct.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D65 — Login is checked once, when the stream opens
+- **Decision:** the login pass and the 404 rule are checked only when a progress stream opens. Once open, the stream keeps going even if the pass expires.
+- **Why:** A long job shouldn't cut off its viewer at minute 30.
+- **Cost:** someone with a stolen pass can keep watching that one job until it ends, even after the pass expires; they can't open anything new with it.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D66 — A keep-alive comment every 15 seconds
+- **Decision:** a stream that has sent nothing for `EVENTS_KEEPALIVE_SECONDS` = 15 sends a comment line (`: keep-alive`), which clients ignore.
+- **Why:** Networks and proxies often close connections that are silent for 30–60 seconds.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D67 — The login pass never goes in a URL
+- **Decision:** the interface reads the progress stream with `fetch` and sends the pass in the Authorization header. Browsers' built-in `EventSource` can't send that header, so it is not used; putting the pass in the address instead is never allowed.
+- **Why:** Addresses end up in server logs, proxy logs and browser history, where a pass could be copied.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
 ---
 
 ## Worker

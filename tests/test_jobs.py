@@ -549,3 +549,27 @@ def test_internal_fields_never_appear_in_any_reply(client, log_in_as):
             "tries",
         ]:
             assert hidden not in reply.text
+
+
+def test_each_mistake_is_reported_exactly_once(client, log_in_as):
+    """A job with three mistakes gives three sentences, none of them twice.
+
+    The body and the Idempotency-Key header are read in one place only
+    (`enforce_daily_budget`, see `CheckedJob`), so FastAPI checks each once.
+    """
+    headers = {**log_in_as("ayse"), "Idempotency-Key": "k" * 300}
+    reply = client.post("/jobs", json={"task": "bogus", "texts": []}, headers=headers)
+    assert reply.status_code == 422
+    message = reply.json()["error"]["message"]
+    # Each sentence starts with the name of the part that broke a rule.
+    assert message.count("idempotency-key: ") == 1
+    assert message.count("task: ") == 1
+    assert message.count("texts: ") == 1
+
+
+def test_docs_still_show_the_job_body_and_key_header(client):
+    """Reading the body only in the budget check must not hide it from /docs."""
+    post_jobs = client.get("/openapi.json").json()["paths"]["/jobs"]["post"]
+    schema = post_jobs["requestBody"]["content"]["application/json"]["schema"]
+    assert schema == {"$ref": "#/components/schemas/JobCreate"}
+    assert [p["name"] for p in post_jobs["parameters"]] == ["idempotency-key"]

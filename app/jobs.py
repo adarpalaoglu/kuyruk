@@ -16,7 +16,7 @@ like a ticket that doesn't exist (404), so nobody can learn which tickets exist.
 """
 
 import uuid
-from typing import Annotated
+from typing import Annotated, NamedTuple
 
 from fastapi import APIRouter, Depends, Header, Query, Response, status
 from sqlalchemy.exc import IntegrityError
@@ -50,12 +50,30 @@ router = APIRouter(tags=["jobs"])
 # Shorthand for "this route needs a logged-in user".
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
-# The optional Idempotency-Key header (double-click protection, D20). Both
-# `create_job` and `enforce_daily_budget` read it; FastAPI reads it once.
+# The optional Idempotency-Key header (double-click protection, D20). Only
+# `enforce_daily_budget` asks for it (see `CheckedJob` for why).
 IdempotencyKey = Annotated[
     str | None,
     Header(min_length=1, max_length=settings.idempotency_key_max_length),
 ]
+
+
+class CheckedJob(NamedTuple):
+    """Everything `POST /jobs` needs, read and checked once.
+
+    `enforce_daily_budget` is the only place that asks FastAPI for the job body
+    and the Idempotency-Key header, and it hands them on to the route in this
+    package. If the route asked for them as well, FastAPI would check them
+    twice and report every mistake twice. (FastAPI remembers a dependency's
+    result only when it succeeds, so a shared "read the body" helper would
+    still run twice when the body is broken.)
+
+    `budget_pass` is None for jobs the budget does not count.
+    """
+
+    new_job: JobCreate
+    idempotency_key: str | None
+    budget_pass: BudgetPass | None
 
 
 def job_not_found() -> ApiError:
@@ -174,14 +192,16 @@ def enforce_daily_budget(
     session: SessionDep,
     user: CurrentUser,
     idempotency_key: IdempotencyKey = None,
-) -> BudgetPass | None:
-    """Check an `llm` job against the daily budget; return its `BudgetPass`.
+) -> CheckedJob:
+    """Check an `llm` job against the daily budget; hand the job to the route.
 
     A FastAPI *dependency* of `POST /jobs`: it runs before the route, using the
-    same request body, session and user. It returns None when there is
-    nothing to count. Order (spec 3.1, D57-D62):
+    same session and user. It is the one place that reads the request body
+    and the Idempotency-Key header (see `CheckedJob`). The budget pass inside
+    the reply is None when there is nothing to count. Order (spec 3.1,
+    D57-D62):
 
-    1. Only `llm` jobs use the AI, so other jobs are free: None.
+    1. Only `llm` jobs use the AI, so other jobs are free (no budget pass).
     2. A repeat of an already saved job (same Idempotency-Key) is not a new
        job: no count, no check; the route returns the saved ticket (D60).
     3. Count the tokens before locking, so the lock is held only briefly, and
@@ -196,26 +216,27 @@ def enforce_daily_budget(
     The lock is let go when the route saves the job (commit) or when the
     request ends without saving (the session is then rolled back).
     """
+    # The reply for every job the budget does not count (steps 1, 2 and 5).
+    free = CheckedJob(new_job, idempotency_key, None)
     if new_job.task != Task.LLM:
-        return None
+        return free
     if idempotency_key and find_job_by_key(session, user, idempotency_key):
-        return None
+        return free
     needed = tokens_for_job(new_job.texts)
     check_too_big(needed)
     lock_user(session, user)
     if idempotency_key and find_job_by_key(session, user, idempotency_key):
-        return None
-    return check_daily_budget(session, user, needed)
+        return free
+    budget_pass = check_daily_budget(session, user, needed)
+    return CheckedJob(new_job, idempotency_key, budget_pass)
 
 
 @router.post("/jobs", response_model=JobPublic, status_code=status.HTTP_202_ACCEPTED)
 def create_job(
-    new_job: JobCreate,
     response: Response,
     session: SessionDep,
     user: CurrentUser,
-    budget_pass: Annotated[BudgetPass | None, Depends(enforce_daily_budget)],
-    idempotency_key: IdempotencyKey = None,
+    checked: Annotated[CheckedJob, Depends(enforce_daily_budget)],
 ) -> Job:
     """Accept a new job and reply 202 with its ticket and a Location header.
 
@@ -229,8 +250,10 @@ def create_job(
 
     For `llm` jobs, `enforce_daily_budget` has already checked the budget and
     counted the tokens; they are saved on the job as `tokens_needed`, with the
-    moment of the check as its `created_at`.
+    moment of the check as its `created_at`. The job itself also comes from
+    `enforce_daily_budget`, so FastAPI checks the body only once.
     """
+    new_job, idempotency_key, budget_pass = checked
     job = None
     if idempotency_key is not None:
         job = find_job_by_key(session, user, idempotency_key)

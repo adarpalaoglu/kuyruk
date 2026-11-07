@@ -146,6 +146,12 @@ class Settings(BaseSettings):
     # below Docker's stop grace time.
     shutdown_grace_seconds: float = Field(default=8.0, ge=0)
 
+    # Live progress (GET /jobs/{ticket}/events, app/events.py, spec 6.1). How
+    # often an open stream looks at its job in the database, in seconds (D63),
+    # and after how many quiet seconds it sends a keep-alive line (D66).
+    events_poll_seconds: float = Field(default=0.5, gt=0)
+    events_keepalive_seconds: float = Field(default=15.0, gt=0)
+
 
 # One shared copy, created once when the program starts, that the rest of the
 # code imports.

@@ -4,7 +4,8 @@ This file creates the FastAPI application (FastAPI is the library that turns
 Python functions into web addresses, called *routes*), makes sure the database
 tables exist on startup, and puts the pieces together:
 
-- the routes: sign-up and log-in (`app/auth.py`) and jobs (`app/jobs.py`);
+- the routes: sign-up and log-in (`app/auth.py`), jobs (`app/jobs.py`),
+  live progress (`app/events.py`) and the budget (`app/budget.py`);
 - the shared error shape for every error reply (`app/errors.py`);
 - the middleware that runs around every request (`app/middleware.py`):
   request ID, timing log, crash safety and the request size limit.
@@ -20,6 +21,7 @@ from app.auth import router as auth_router
 from app.budget import router as budget_router
 from app.db import create_db_and_tables
 from app.errors import install_error_handlers
+from app.events import router as events_router
 from app.jobs import router as jobs_router
 from app.middleware import BodySizeLimitMiddleware, RequestIdMiddleware
 from app.settings import settings
@@ -51,6 +53,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(jobs_router)
+app.include_router(events_router)
 app.include_router(budget_router)
 install_error_handlers(app)
 
