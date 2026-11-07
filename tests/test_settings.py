@@ -90,3 +90,16 @@ def test_auth_defaults_match_the_spec(monkeypatch):
     assert settings.access_token_minutes == 30
     assert (settings.username_min_length, settings.username_max_length) == (3, 30)
     assert (settings.password_min_length, settings.password_max_length) == (8, 128)
+
+
+def test_default_ai_backend_is_the_fake(monkeypatch):
+    monkeypatch.delenv("AI_BACKEND", raising=False)
+
+    assert Settings(_env_file=None).ai_backend == "fake"
+
+
+def test_unknown_ai_backend_is_refused(monkeypatch):
+    monkeypatch.setenv("AI_BACKEND", "openai")
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)

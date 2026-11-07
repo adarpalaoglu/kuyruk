@@ -3,7 +3,7 @@
 Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12 lists the slices).
 
 ## Current slice
-**Slice 4 — Tasks + fake AI + Ollama client** (not started)
+**Slice 5 — Worker** (not started)
 
 ## Slices
 
@@ -13,7 +13,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 | 1 | Data model + database session | ☑ | 20 tests, 99% coverage; tables checked on real Postgres 16 |
 | 2 | Auth | ☑ | 60 tests, 99% coverage; real register/login checked with curl |
 | 3 | Jobs API | ☑ | 147 tests, 99% coverage; real curl run on Postgres 16 |
-| 4 | Tasks + fake AI + Ollama client | ☐ | |
+| 4 | Tasks + fake AI + Ollama client | ☑ | 245 tests, 99% coverage; real Gemma checked on 2 reviews |
 | 5 | Worker | ☐ | |
 | 6 | Budget + lock | ☐ | |
 | 7 | SSE progress | ☐ | |
@@ -31,6 +31,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 
 ## Decision log
 - Entries D01–D41 drafted 5–6 Nov 2026 · Approved by Adar: ☑ (6 Nov 2026)
+- D44–D49 and the D04 wording update · Approved by Adar: ☑ (7 Nov 2026)
 
 ## Interface parity (fill in at slice 17)
 Everything on `/docs` can be done in the interface:
@@ -51,9 +52,21 @@ Everything on `/docs` can be done in the interface:
 - Code review: changing `tokens_needed` to nullable breaks a Postgres database made before Slice 3 (no migrations). Accepted as the D42 cost, no code change: wipe with `docker compose down -v`.
 - The two-requests-at-once idempotency test on SQLite simulates the race (a lookup that misses once). A real two-at-once test belongs with the Postgres tests in Slice 9.
 
+Slice 4 (limits for the README, and leftovers):
+- Code review found emails with Turkish letters stored in two parts were not hidden. Fixed by Adar's new rule order, NFC first (D49); spec 2.1 updated, tests added.
+- Phone pattern catches only +90 / 0 followed by 3-3-2-2 digits with spaces, dashes or nothing between. Missed: no leading 0 (532 123 45 67), brackets `(0312)`, dots, a line break inside the number, numbers in words. Email pattern is simple; unusual valid emails may be missed. A user who types `[EMAIL]` or `[TELEFON]` themselves keeps it in capitals.
+- Whitespace rule also turns tabs and other Unicode spaces into one space.
+- Token counts use tiktoken `o200k_base` (OpenAI's rulebook), an approximation of Gemma's own tokenizer, not the same. Its file is in `app/data/` with a checksum check; the pattern is copied from tiktoken 0.14.0 and a test checks it still matches. In 4 small samples Turkish was not always more tokens than English (10 vs 11, 12 vs 11), so no test assumes it; Slice 15 measures it.
+- Real Gemma is *mostly* repeatable, not always: with temperature 0 and seed 42 the same review gave one summary on its first try and a different one on the next 6 tries (which all matched). Experiments must not assume identical summaries. Times: 5.5 s warm-up, then 0.5–1.1 s per short review.
+- `ollama_times.csv` (Slice 10) must have one column named `seconds`.
+- Fake AI "fail every Nth" counts calls, not texts: a retry is a new call.
+- Ollama errors after review (D47): 429 and a reply that breaks off halfway are temporary, like timeouts, unreachable and 5xx.
+- `httpx` moved from test-only to a main library (the Ollama client uses it); `tiktoken==0.14.0` added.
+
 ## Session log
 - 6 Nov 2026 — Planning finished in Claude app. Starting documents created. Tools installed. Decision log D01–D41 approved.
 - 6 Nov 2026 — Slice 0 done: uv project (Python 3.12, exact pins + `uv.lock`), folders, `app/settings.py`, `/health` + tests, `.env.example`, `.gitignore`, MIT licence, placeholder README, `ci.yml` (ruff + pytest, 85% gate).
 - 6 Nov 2026 — Slice 1 done: `users`/`jobs`/`job_items` tables (SQLModel), fixed state lists, idempotency key unique per owner, `DATABASE_URL` setting, `get_session`, `create_all` on startup, `compose.yaml` with `db` only (Postgres 16.15, digest-pinned). "Code comments" rule added to CLAUDE.md and applied to Slice 0 files.
 - 6 Nov 2026 — Slice 2 built (awaiting review/commit): D42 added; open items on `task` list and D42 closed; SQLite now enforces foreign keys (tests + app). D43 added. Auth: `/register` (201, 409, 422; lowercase usernames, D43), `/token` (OAuth2 password flow, JWT via PyJWT, same 401 and same work for wrong password/unknown user; passwords over the maximum refused at once, a review fix), `get_current_user`; Argon2 hashing via pwdlib (FastAPI docs' recommendation); `UserCreate`/`UserPublic`/`Token`; auth settings + `.env.example`.
 - 6 Nov 2026 — Slice 3 done: `POST /jobs` (limits from settings, first broken text named by position, control characters except \n \t \r refused, lone surrogates refused, one transaction, 202 + Location, Idempotency-Key with 409 on different content and race handled by the unique rule), `GET /jobs/{ticket}`, `GET /jobs?status=&limit=&offset=`, `GET /jobs/{ticket}/results`; same 404 for other/missing/malformed tickets; `JobPublic`/`JobItemPublic`; one error shape for every error incl. 500 (`app/errors.py`); request ID + timing + safe 500 + 25 MB body limit with 413 (`app/middleware.py`); `tokens_needed` nullable. Login errors now use the shared shape.
+- 7 Nov 2026 — Slice 4 done: `normalise` (Adar's 6 rules, placeholders stay capital), `count_tokens` (tiktoken o200k_base, offline, checksum), AI interface with temporary/permanent errors, fake AI (fixed/replay, fail every Nth, temporary/permanent), Ollama client (think off, temperature 0, seed), `AI_BACKEND` switch (default fake). Manual check with real gemma4:e4b done. Review fixes: NFC first (D49); 429 and cut-off replies temporary (D47). D44–D49 approved.

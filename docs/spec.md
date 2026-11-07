@@ -1,6 +1,6 @@
 # Kuyruk — specification
 
-Owner and decision-maker: Adar Palaoğlu. Code: Claude Code. Last updated: 6 November 2026.
+Owner and decision-maker: Adar Palaoğlu. Code: Claude Code. Last updated: 7 November 2026.
 Reasons for every decision: `docs/decision-log.md`. Status: `docs/progress.md`.
 
 ---
@@ -24,10 +24,10 @@ The finished project is **frozen**: all versions pinned, nothing online, nothing
 One task per job; every text in the job gets the same task. Together the three tasks form a realistic AI pipeline: clean → count → AI.
 
 ### 2.1 `normalise` — HAND-DESIGNED (Adar's rules, in this order)
-1. Replace emails and Turkish phone numbers with `[EMAIL]` and `[TELEFON]` (simple patterns; imperfection noted in limits). Runs first so later steps can't alter them.
-2. Unicode NFC (each letter stored one way).
+1. Unicode NFC (each letter stored one way). Runs first so an email containing a Turkish letter stored in two parts is still recognised (D49).
+2. Replace emails and Turkish phone numbers with `[EMAIL]` and `[TELEFON]` (simple patterns; imperfection noted in limits). Runs before the remaining steps so they can't alter them; NFC never changes the placeholders.
 3. Trim start and end; collapse runs of spaces and line breaks into one space.
-4. Turkish lowercasing: `I → ı`, `İ → i`, then lowercase the rest (e.g. `ISPARTA İÇİN → ısparta için`).
+4. Turkish lowercasing: `I → ı`, `İ → i`, then lowercase the rest (e.g. `ISPARTA İÇİN → ısparta için`). The placeholders `[EMAIL]` and `[TELEFON]` stay in capitals (D44).
 5. Keep Turkish letters ç ğ ı ö ş ü (never strip them: `kır` ≠ `kir`). Texts typed without them stay as they are.
 6. Keep emoji.
 
@@ -37,7 +37,7 @@ Tests must cover each rule with Turkish examples (ç/ğ/ı/İ/ö/ş/ü, no-diacr
 Count tokens with tiktoken, one fixed encoding (pin it in settings). Result: the integer count.
 
 ### 2.3 `llm`
-Send each text to the AI with one fixed instruction: *"Summarise this in one Turkish sentence."* Users cannot change the instruction. Result: the summary text.
+Send each text to the AI with one fixed instruction: *"Summarise this in one Turkish sentence. Reply with only that sentence."* Users cannot change the instruction. Result: the summary text.
 
 ### 2.4 The AI behind `llm`
 One setting chooses the AI: `AI_BACKEND = ollama | fake`.

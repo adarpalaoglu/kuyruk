@@ -6,6 +6,8 @@ starts) or by writing it in a local `.env` file. The variable name is the field
 name in capitals, e.g. `database_url` is read from `DATABASE_URL`.
 """
 
+from typing import Literal
+
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -80,6 +82,44 @@ class Settings(BaseSettings):
     # job that follows the text rules is never refused for its size, while
     # someone still can't send gigabytes.
     max_request_bytes: int = 25 * 1024 * 1024
+
+    # Token counting (app/tokens.py). The encoding is the rulebook that chops
+    # text into tokens. Its file is kept inside the repo (app/data/), so
+    # counting never needs the internet (D45).
+    token_encoding: str = "o200k_base"
+
+    # Which AI the `llm` task uses: "ollama" (the real model on this Mac) or
+    # "fake" (a stand-in for tests and experiments). Only app/ai.py reads this.
+    # "fake" by default, so a fresh copy of Kuyruk works with nothing installed.
+    ai_backend: Literal["ollama", "fake"] = "fake"
+
+    # The real AI. Ollama is a program that runs AI models on this computer and
+    # answers web requests at this address. The model tag gemma4:e4b was
+    # installed on 6 Nov 2026 with digest eb2177adf764... (spec 2.4, D08).
+    # Temperature 0 and a fixed seed make the same text give the same summary
+    # almost every time (not always: see limits), so experiment runs are
+    # comparable (D46). The timeout is how many seconds to wait for an answer
+    # before counting it as a temporary error.
+    ollama_url: str = "http://localhost:11434"
+    ollama_model: str = "gemma4:e4b"
+    ollama_temperature: float = 0.0
+    ollama_seed: int = 42
+    ollama_timeout_seconds: float = 120.0
+
+    # The fake AI (spec 2.4). It waits, then returns a fixed answer.
+    # Wait mode "fixed" always waits fake_ai_wait_seconds; "replay" picks each
+    # wait from real measured times in fake_ai_replay_file (made in Slice 10),
+    # using fake_ai_seed so the same seed always gives the same waits.
+    fake_ai_wait_mode: Literal["fixed", "replay"] = "fixed"
+    fake_ai_wait_seconds: float = Field(default=1.0, ge=0)
+    fake_ai_replay_file: str = "bench/data/ollama_times.csv"
+    fake_ai_seed: int = 42
+    fake_ai_answer: str = "Bu metin kısaca özetlenmiştir."
+    # Failing on purpose: 0 = never, 1 = every call, N = every Nth call. A retry
+    # is a new call, so with N above 1 a retried text can succeed. The kind says
+    # whether the failure is temporary (worth retrying) or permanent.
+    fake_ai_fail_every: int = Field(default=0, ge=0)
+    fake_ai_fail_kind: Literal["temporary", "permanent"] = "temporary"
 
 
 # One shared copy, created once when the program starts, that the rest of the

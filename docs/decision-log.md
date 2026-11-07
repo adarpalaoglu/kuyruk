@@ -28,9 +28,9 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 
 ### D04 — One fixed AI instruction
 - **Options:** users write their own instruction · one fixed instruction.
-- **Decision:** fixed: "Summarise this in one Turkish sentence."
-- **Why:** Runs stay comparable across experiments, and I avoid prompt-injection problems, which are not what this project is about.
-- **Date:** 5 Nov 2026 · **Status:** Approved (6 Nov 2026)
+- **Decision:** fixed: "Summarise this in one Turkish sentence. Reply with only that sentence."
+- **Why:** Runs stay comparable across experiments, and I avoid prompt-injection problems, which are not what this project is about. The second sentence was added (7 Nov 2026) because in testing the model otherwise added alternative versions.
+- **Date:** 5 Nov 2026, wording updated 7 Nov 2026 · **Status:** Approved (6 Nov 2026; update approved 7 Nov 2026)
 
 ---
 
@@ -58,6 +58,29 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 - **Decision:** Gemma 4 E4B, exact version pinned; Ollama runs directly on the Mac.
 - **Why:** It is small enough for my MacBook Air (24 GB), trained on many languages including Turkish, and easy for others to reproduce. Like Qwen, Gemma 4 "thinks out loud" before answering by default (I saw this in my first test), which adds long, uneven delay, so I switch thinking off on every call and ask for one sentence only. Docker on a Mac can't use the chip's graphics power, so the AI inside Docker would be much slower.
 - **Date:** 6 Nov 2026 · **Status:** Approved (6 Nov 2026)
+
+### D45 — Tokens counted with tiktoken `o200k_base`, its file kept in the repo
+- **Options:** tiktoken with a fixed encoding · Gemma's own tokenizer (needs Ollama running, or a much bigger library).
+- **Decision:** tiktoken with `o200k_base`, set in settings. The encoding file is kept in the repo and checked by checksum before use.
+- **Why:** It is fast, works with no internet, and can't silently change. A frozen project can't depend on a download link.
+- **Cost:** The count is an estimate of Gemma's real count, not exact. Stated in the limits.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D46 — Temperature 0 and a fixed seed, so runs are comparable
+- **Decision:** every Ollama call uses temperature 0 (no randomness in word choice) and a fixed seed from settings.
+- **Why:** Experiment runs should get the same answers for the same texts, so differences come from Kuyruk, not the AI.
+- **Cost:** The same text gives the same summary almost always, not always: in the Slice 4 manual check, one review's first answer differed from the next six (which all matched).
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D47 — Which AI errors are temporary
+- **Decision:** temporary (retried) = timeout, Ollama unreachable, a 5xx reply, a 429 ("too many requests") reply, or a reply cut off halfway. Anything else is permanent and fails at once.
+- **Why:** Temporary errors mean "the AI couldn't answer right now", so trying again a moment later may work. Permanent errors (e.g. wrong model name) will never work, and retrying only wastes time (D16).
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D48 — The fake AI is the default
+- **Decision:** `AI_BACKEND` is `fake` unless set to `ollama`.
+- **Why:** A fresh copy of Kuyruk works with nothing installed. I set `ollama` in my own `.env` for real work.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
 
 ### D09 — Warm-up requests before measuring
 - **Decision:** send a few uncounted requests before every measurement.
@@ -187,8 +210,19 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 4. Lowercase the Turkish way (I → ı, İ → i), because standard software gets Turkish wrong (ISPARTA → "isparta" instead of "ısparta").
 5. Keep Turkish letters, because removing them changes meaning (kır = countryside, kir = dirt).
 6. Keep emoji, because they carry meaning (🙄 turns praise into sarcasm).
-- **Order:** hiding personal details runs first so lowercasing can't change an email before it is hidden.
+- **Order:** hiding personal details runs first so lowercasing can't change an email before it is hidden. *(Changed 7 Nov 2026: NFC now runs first, see D49; placeholders stay in capitals, see D44.)*
 - **Date:** 5 Nov 2026 · **Status:** Approved (6 Nov 2026)
+
+### D44 — Placeholders stay in capitals
+- **Decision:** `[EMAIL]` and `[TELEFON]` are not lowercased by rule 4.
+- **Why:** In capitals it is obvious that something was hidden there, and they can't be confused with real words.
+- **Cost:** A user who types `[EMAIL]` or `[TELEFON]` themselves also keeps it in capitals.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+### D49 — NFC runs first, before hiding emails and phones
+- **Decision:** new order: 1 NFC, 2 hide emails and phones, 3 tidy spaces, 4 Turkish lowercase (placeholders stay capital), 5 keep Turkish letters, 6 keep emoji.
+- **Why:** The code review found that an email with a Turkish letter stored in two parts (e.g. "ş" as "s" plus a separate mark, common in text pasted from a Mac or a PDF) was partly or not at all hidden, so personal data could reach the AI. Joining letters first fixes that. NFC never changes the placeholders, so the reason for hiding early still holds.
+- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
 
 ---
 
