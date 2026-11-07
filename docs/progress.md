@@ -121,7 +121,8 @@ Slice 9 (limits for the README, and leftovers):
 - The worker no longer creates tables (D78). On a database with no tables, a worker started on its own (outside compose) logs errors every second until the API has started once.
 - **Limit:** the published image is built on GitHub's machines for Intel/AMD (linux/amd64) only. `docker compose up` builds locally, so it works on any Mac; pulling the GHCR image onto an Apple-chip Mac runs it through emulation (slower).
 - **Limit:** in demo mode the database is written once a second per running job (D81).
-- With `--rmi all`, the clean-machine check also removes the shared `postgres:16.15-alpine` and `kuyruk:local` images; the next `docker compose up` downloads and builds them again (about 30 s).
+- Code review fixes (Adar approved both): (1) compose gave the image a fixed name (`kuyruk:local`), so the clean-machine check overwrote and then deleted the normal setup's image and the shared Postgres image, against D86. Now there is no fixed name (images are named after the project, e.g. `kuyruk-api`), and the check removes only images it built (`--rmi local`); rerun 19/19 PASS, Postgres image kept. (2) Two quick pushes to main could leave `latest` on the older commit. Releases now run one at a time, and `latest` moves only if the commit is still the newest on main (D85 updated). Cost: if a third release arrives while one runs and one waits, the waiting one is dropped and its commit gets no image.
+- The clean-machine check keeps the Postgres image (pinned by digest, so it is always the same one); `--pull` only refreshes the Python and uv images used to build.
 - Local Docker setup: the database port moved to 127.0.0.1:5432; the local volume and `.env` were not touched (Postgres tests still use `kuyruk_test`).
 
 ## Session log

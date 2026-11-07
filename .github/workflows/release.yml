@@ -28,6 +28,15 @@ permissions:
   contents: read
   packages: write
 
+# One release at a time, in the order they start, so two quick pushes to main
+# can't finish out of order and leave "latest" on the older commit. A running
+# release is never cancelled. (GitHub keeps at most one release waiting: if a
+# third arrives meanwhile, the waiting one is dropped, and its commit gets no
+# image; the newer one does.)
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-24.04
@@ -72,12 +81,30 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # "latest" must always be the newest commit on main. If main has moved
+      # on since CI tested this commit, publish only the commit tag and leave
+      # "latest" to the newer commit's release (D85).
+      - name: Is this still the newest commit on main?
+        id: newest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tip=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [ "$tip" = "$COMMIT" ]; then
+            echo "latest=true" >> "$GITHUB_OUTPUT"
+            echo "Newest commit on main: tagging latest too."
+          else
+            echo "latest=false" >> "$GITHUB_OUTPUT"
+            echo "main has moved on to $tip: commit tag only."
+          fi
+
       # Buildx is Docker's builder; needed by the next step.
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       # Build ./Dockerfile and publish it with two tags (D85): the commit's
       # full id (exact and permanent: this image is that commit) and "latest"
-      # (always the newest image from main). REVISION fills the image's
+      # (the newest image from main; only if the step above said so, otherwise
+      # that line is empty and ignored). REVISION fills the image's
       # "revision" label, so any image can be traced to its commit.
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -87,4 +114,4 @@ jobs:
             REVISION=${{ env.COMMIT }}
           tags: |
             ${{ env.IMAGE }}:${{ env.COMMIT }}
-            ${{ env.IMAGE }}:latest
+            ${{ steps.newest.outputs.latest == 'true' && format('{0}:latest', env.IMAGE) || '' }}

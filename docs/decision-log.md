@@ -450,11 +450,11 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 
 ### D85 — Image tags: the commit id and `latest`
 - **Decision:** each published image gets two tags: the full commit id, and `latest`. The image also carries standard labels: source (the repo), licence (MIT), revision (the commit id), title and description.
-- **Why:** The commit tag is exact and never moves: that image is that commit, forever. `latest` is convenient: always the newest image from main. The labels let GitHub link the image to the repo and let anyone trace any image back to its commit.
-- **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+- **Why:** The commit tag is exact and never moves: that image is that commit, forever. `latest` is convenient: always the newest image from main. The labels let GitHub link the image to the repo and let anyone trace any image back to its commit. `latest` is only moved if the commit is still the newest on main when its release runs, and releases run one at a time, so two quick pushes can never leave `latest` on the older commit. *(Added 7 Nov 2026 after the Slice 9 code review.)*
+- **Date:** 7 Nov 2026, updated 7 Nov 2026 · **Status:** Approved (7 Nov 2026; update approved 7 Nov 2026)
 
 ### D86 — The clean-machine check runs on a copy without `.env`, under its own name
-- **Decision:** `scripts/clean_machine_check.py` copies the project's files (git's list, so no `.env`) into a temporary folder and runs everything under the Docker project name `kuyruk-check`. It removes that project's containers, volumes and images, builds with no cache, starts with `docker compose up`, uses Kuyruk like a visitor (sign up, log in, job, live progress, demo crash, recovery) and prints pass/fail per step, then removes everything again.
+- **Decision:** `scripts/clean_machine_check.py` copies the project's files (git's list, so no `.env`) into a temporary folder and runs everything under the Docker project name `kuyruk-check`. Images have no fixed name, so each project's images are its own. It removes that project's containers, volume and the images it built (not the shared Postgres image), builds with no cache, starts with `docker compose up`, uses Kuyruk like a visitor (sign up, log in, job, live progress, demo crash, recovery) and prints pass/fail per step, then removes everything again.
 - **Why:** My own `.env` and database would hide exactly the problems a first-time visitor would meet. A copy without `.env` behaves like a fresh download, and a separate project name means the check never touches my local data.
 - **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
 

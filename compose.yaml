@@ -24,9 +24,12 @@
 # Settings shared by the api and the worker (`&kuyruk-app` names this block;
 # `<<: *kuyruk-app` below pastes it in).
 x-kuyruk-app: &kuyruk-app
-  # Both run the same image, built from ./Dockerfile.
+  # Both are built from ./Dockerfile. No fixed image name on purpose: Docker
+  # names the images after the project (e.g. kuyruk-api, kuyruk-worker), so
+  # a second project, such as the clean-machine check (kuyruk-check), never
+  # overwrites or deletes this one's images (D86). The two share every layer,
+  # so the second name costs no extra disk space.
   build: .
-  image: kuyruk:local
   # Every other setting in .env (e.g. DAILY_TOKEN_BUDGET) reaches Kuyruk too.
   # "required: false": no .env is fine (the demo).
   env_file:

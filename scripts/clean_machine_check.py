@@ -8,7 +8,8 @@ script imitates one (D86) and then uses Kuyruk like a visitor would:
    download, compose must fall back to its demo-only values;
 2. runs everything under its own Docker project name, `kuyruk-check`, so the
    containers, the database volume (Docker's storage folder) and the images of
-   the normal local setup are never touched;
+   the normal local setup are never touched (`--rmi local` removes only the
+   images this project built, never the shared Postgres image);
 3. removes anything left from an earlier check, builds the image with no
    cache (nothing reused from earlier builds), starts it with
    `docker compose up`, and waits until all three containers are healthy;
@@ -285,7 +286,7 @@ def run(check: Check, folder: Path) -> None:
         not (folder / ".env").exists(), "Project copied without .env", str(folder)
     )
 
-    compose(folder, "down", "-v", "--rmi", "all", "--remove-orphans", check=False)
+    compose(folder, "down", "-v", "--rmi", "local", "--remove-orphans", check=False)
     check.record(True, "Old kuyruk-check containers, volumes and images removed")
 
     built = compose(folder, "build", "--no-cache", "--pull", check=False)
@@ -293,7 +294,7 @@ def run(check: Check, folder: Path) -> None:
         print(built.stdout[-3000:], built.stderr[-3000:])
         return
     image = subprocess.run(
-        ["docker", "image", "ls", "kuyruk:local", "--format", "{{.Size}}"],
+        ["docker", "image", "ls", f"{PROJECT}-api", "--format", "{{.Size}}"],
         capture_output=True,
         text=True,
     ).stdout.strip()
@@ -354,7 +355,7 @@ def main() -> None:
         check.record(False, "Unexpected error", repr(error))
         print(compose(folder, "logs", "--tail", "40", check=False).stdout)
     finally:
-        compose(folder, "down", "-v", "--rmi", "all", "--remove-orphans", check=False)
+        compose(folder, "down", "-v", "--rmi", "local", "--remove-orphans", check=False)
         shutil.rmtree(folder.parent, ignore_errors=True)
         check.record(
             True, "Cleaned up: kuyruk-check containers, volumes and images removed"
