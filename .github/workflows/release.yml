@@ -1,0 +1,117 @@
+# GitHub Actions workflow that publishes Kuyruk's image to GitHub's container
+# registry (GHCR, ghcr.io) after the tests have passed on main (D35, D84).
+#
+# It is started by `workflow_run`: "when the CI workflow has finished". It
+# then publishes only if that CI run passed, was started by a push (not a pull
+# request), on main, in this repository, and it builds exactly the commit CI
+# tested. So tests run once, and a commit whose tests fail never gets an image.
+#
+# Safety (D84): like `pull_request_target` (D37), a `workflow_run` workflow
+# gets this repository's secrets and, here, permission to publish, even when
+# the CI run it follows came from a stranger's pull request. That is why the
+# checks below must never be loosened: it must never act on a pull request
+# run, and never build pull request code.
+#
+# GitHub only starts `workflow_run` workflows that are on the default branch
+# (main).
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+# The token GitHub gives this run may only read the code and publish packages
+# (images). Nothing else.
+permissions:
+  contents: read
+  packages: write
+
+# One release at a time, in the order they start, so two quick pushes to main
+# can't finish out of order and leave "latest" on the older commit. A running
+# release is never cancelled. (GitHub keeps at most one release waiting: if a
+# third arrives meanwhile, the waiting one is dropped, and its commit gets no
+# image; the newer one does.)
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    # All five must be true, or the job is skipped (shown grey, not red).
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.repository.full_name == github.repository
+    env:
+      # GHCR names must be lower case; "adarpalaoglu/kuyruk" already is.
+      IMAGE: ghcr.io/${{ github.repository }}
+      # The exact commit the CI run tested (not "the newest commit on main",
+      # which may already be a later one).
+      COMMIT: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      # E4 (D36): the same check as in ci.yml. Only "yes" or "no" is printed,
+      # never the value.
+      - name: Secret check (E4)
+        env:
+          DEMO_SECRET: ${{ secrets.DEMO_SECRET }}
+          EVENT: ${{ github.event_name }}
+          FROM_EVENT: ${{ github.event.workflow_run.event }}
+          FROM_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          if [ -n "$DEMO_SECRET" ]; then present=yes; else present=no; fi
+          echo "event: $EVENT (from $FROM_EVENT on $FROM_BRANCH) · secret present: $present"
+
+      # Check out exactly the tested commit. persist-credentials: false means
+      # the login token is not left behind in the checked-out folder.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      # Log in to GHCR with the token GitHub creates for this run (no stored
+      # password needed).
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # "latest" must always be the newest commit on main. If main has moved
+      # on since CI tested this commit, publish only the commit tag and leave
+      # "latest" to the newer commit's release (D85).
+      - name: Is this still the newest commit on main?
+        id: newest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tip=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [ "$tip" = "$COMMIT" ]; then
+            echo "latest=true" >> "$GITHUB_OUTPUT"
+            echo "Newest commit on main: tagging latest too."
+          else
+            echo "latest=false" >> "$GITHUB_OUTPUT"
+            echo "main has moved on to $tip: commit tag only."
+          fi
+
+      # Buildx is Docker's builder; needed by the next step.
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Build ./Dockerfile and publish it with two tags (D85): the commit's
+      # full id (exact and permanent: this image is that commit) and "latest"
+      # (the newest image from main; only if the step above said so, otherwise
+      # that line is empty and ignored). REVISION fills the image's
+      # "revision" label, so any image can be traced to its commit.
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          build-args: |
+            REVISION=${{ env.COMMIT }}
+          tags: |
+            ${{ env.IMAGE }}:${{ env.COMMIT }}
+            ${{ steps.newest.outputs.latest == 'true' && format('{0}:latest', env.IMAGE) || '' }}

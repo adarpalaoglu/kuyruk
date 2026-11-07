@@ -18,7 +18,13 @@ The API only saves a job and gives back a ticket. This program, started with
 5. checks before every text whether the user cancelled, or whether another
    worker has taken the job over (D72);
 6. writes one log line each time it starts a text ("text started job=...
-   position=... worker=..."), so experiment E2 can count redone texts (D75).
+   position=... worker=..."), so experiment E2 can count redone texts (D75);
+7. if WORKER_ALIVE_FILE is set (in Docker), keeps re-dating that "I'm alive"
+   file, so Docker's health check can tell the worker is really working
+   (`python -m app.worker --check-alive`, D79).
+
+The worker never creates the database tables: only the API does, when it
+starts, and in Docker the worker starts only after the API is healthy (D78).
 
 Every state change goes through `app/states.py`, which only changes a state if
 it is still what the worker expects, so a user's cancel always wins (D51).
@@ -33,10 +39,13 @@ import logging
 import os
 import signal
 import socket
+import sys
+import time
 import uuid
 from collections import deque
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
+from pathlib import Path
 from typing import Literal
 
 from sqlalchemy import Engine, func, or_, update
@@ -251,6 +260,7 @@ class Worker:
         stale_after_seconds: float = settings.stale_after_seconds,
         max_crash_count: int = settings.max_crash_count,
         demo_mode: bool = settings.demo_mode,
+        alive_file: str = settings.worker_alive_file,
     ) -> None:
         """Remember the database, the AI and the numbers to work with."""
         self.engine = engine
@@ -268,11 +278,28 @@ class Worker:
         self.max_crash_count = max_crash_count
         # Only in demo mode does this worker obey a demo crash mark (D74).
         self.demo_mode = demo_mode
+        # The "I'm alive" file for Docker's health check (D79); "" = none.
+        self.alive_file = alive_file
         # Set when the worker is asked to stop (Ctrl+C or a stop signal).
         self.stopping = asyncio.Event()
         # Texts of the current job that failed one after another; reset to 0 by
         # every success (D54).
         self.failures_in_a_row = 0
+
+    def mark_alive(self) -> None:
+        """Re-date the "I'm alive" file, if there is one (D79).
+
+        Called on every pass of the main loop and at every heartbeat, so the
+        file stays fresh exactly while the worker is really working. If the
+        worker freezes, the file grows old and the health check fails. A file
+        that can't be written is logged, never allowed to stop the worker.
+        """
+        if not self.alive_file:
+            return
+        try:
+            Path(self.alive_file).touch()
+        except OSError:
+            log.exception("Could not touch the alive file %s.", self.alive_file)
 
     def stop(self) -> None:
         """Ask the worker to stop: no new texts start, then it exits (D55)."""
@@ -290,6 +317,7 @@ class Worker:
         """
         log.info("Worker %s started.", self.worker_id)
         while not self.stopping.is_set():
+            self.mark_alive()
             try:
                 worked = await self.run_one_job()
             except Exception:
@@ -578,6 +606,9 @@ class Worker:
         """
         while True:
             await asyncio.sleep(self.heartbeat_seconds)
+            # Before the beat itself: the worker is alive even if the
+            # database is briefly unreachable and this beat fails.
+            self.mark_alive()
             try:
                 self.beat(job_id)
             except Exception:
@@ -702,16 +733,42 @@ async def serve(worker: Worker) -> None:
             loop.remove_signal_handler(stop_signal)
 
 
-def main() -> None:
-    """Start the worker: set up logging, make sure the tables exist, then run."""
+def is_alive(path: str, max_age_seconds: float) -> bool:
+    """Say whether the "I'm alive" file exists and is fresh enough (D79).
+
+    "Fresh" means it was re-dated less than `max_age_seconds` ago. Docker's
+    health check uses this through `python -m app.worker --check-alive`.
+    """
+    if not path:
+        return False
+    try:
+        age = time.time() - Path(path).stat().st_mtime
+    except OSError:
+        return False
+    return age < max_age_seconds
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Start the worker, or, with `--check-alive`, only run the health check.
+
+    The health check exits with code 0 (healthy) or 1 (unhealthy), which is
+    what Docker reads. Otherwise: set up logging and run the worker. The
+    tables are not created here: the API does that (D78).
+    """
+    args = sys.argv[1:] if argv is None else argv
+    if args == ["--check-alive"]:
+        healthy = is_alive(
+            settings.worker_alive_file, settings.worker_alive_max_age_seconds
+        )
+        sys.exit(0 if healthy else 1)
+
     # Imported here so that importing this file (e.g. in tests) never connects
     # to the real database.
-    from app.db import create_db_and_tables, engine
+    from app.db import engine
 
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
     )
-    create_db_and_tables()
     asyncio.run(serve(Worker(engine, get_ai_backend())))
 
 

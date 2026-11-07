@@ -3,7 +3,7 @@
 Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12 lists the slices).
 
 ## Current slice
-**Slice 9 — Docker, compose, release workflow** (not started). Slice 8 done.
+**Slice 9 — Docker, compose, release workflow** (built; on branch `slice-9`, PR open, awaiting code review and merge). Slice 8 done.
 
 ## Slices
 
@@ -18,7 +18,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 | 6 | Budget + lock | ☑ | 368 tests, 99% coverage; Postgres race test passes (and fails with the lock off); real curl run on Postgres 16 |
 | 7 | SSE progress | ☑ | 394 tests, 99% coverage; real 20-text fake-AI job watched live with curl on Postgres 16 |
 | 8 | Crash recovery + two workers | ☑ | 454 tests (5 on Postgres), 99.9% coverage; real kill -9 run on Postgres 16: 20/20 ok, crash count 1, 4 texts redone |
-| 9 | Docker, compose, release workflow | ☐ | |
+| 9 | Docker, compose, release workflow | ◐ | 466 tests (6 on Postgres), 99.7% coverage (fast suite); clean-machine check 19/19 PASS; image 328 MB (71 MB compressed); awaiting review |
 | 10 | Measure the real AI | ☐ | |
 | 11 | E1 | ☐ | Prediction written? ☐ |
 | 12 | E2 | ☐ | Prediction written? ☐ |
@@ -37,6 +37,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 - D63–D67 (live progress) and the spec 6.1 wording update · Approved by Adar: ☑ (7 Nov 2026)
 - D68–D75 (crash recovery) and the spec 5 update (two new Job fields) · Approved by Adar: ☑ (7 Nov 2026); D74 update (crash mark also checked before each text) approved 7 Nov 2026
 - D76 (polite stop hands the job back) and the D55 / D70 wording updates, from the Slice 8 code review · Approved by Adar: ☑ (7 Nov 2026)
+- D77–D86 (Docker, demo mode, CI, release) and the D55 note (compose sets 12 s) · Approved by Adar: ☑ (7 Nov 2026)
 
 ## Interface parity (fill in at slice 17)
 Everything on `/docs` can be done in the interface:
@@ -110,6 +111,21 @@ Slice 8 (limits for the README, and leftovers):
 - Local Postgres was wiped once for the two new columns (`docker compose down -v`, D42); `kuyruk_test` was created again. The demo check left one 8-text job `running` at 4 of 8 (user `mehmet`): the next worker start will take it over (crash count 1) and finish it.
 - Manual check (7 Nov 2026, Postgres, fake AI 2 s per text, 4 at once, default 5 s heartbeat / 30 s stale): 20-text job, worker 1 killed with `kill -9` at 7 s with 12 ok; job stayed `running` at 12/20; worker 2 started at once and took it over 28 s later ("taken over ... (crash 1)"); stream showed progress 4, 8, 12, keep-alive, `recovered {"from_position": 13}`, progress 16, 20, `state: done`, `end: done`. Final: done, 20 ok, 0 failed, crash count 1, every text 1 try; texts 13–16 were started by both workers (24 starts for 20 texts). Demo endpoint: 404 `not_found` with demo mode off (even logged in); in demo mode 409 `no_running_job` with no running job, and 202 with a running job; the worker exited (code 1, no "stopped" line) 2.2 s later.
 
+Slice 9 (limits for the README, and leftovers):
+- **For Slice 10:** write `bench/data/ollama_times.csv`, then delete `bench/data/placeholder_times.csv`, remove the `FAKE_AI_REPLAY_FILE` line from `compose.yaml`, and update `bench/data/README.md` (D82).
+- **For Slice 17:** add the `web` service to compose (spec 8); the API port is open to this computer only (127.0.0.1:8000), like the database.
+- CI on branch `slice-9` (7 Nov 2026), both green: push run 42376438124 (`event: push · from fork: false · secret present: yes`, 1m15s) and pull_request run 42376452310 for PR #1 (`event: pull_request · from fork: false · secret present: yes`, 1m23s); in both, 460 fast tests (99.66%) and the 6 Postgres tests PASSED, none skipped. The release workflow runs only after the merge (it must be on main first).
+- **For E4 (Slice 14):** the secret check prints one line per run: `event: … · from fork: … · secret present: yes/no` in CI and `event: workflow_run (from push on main) · secret present: …` in the release. Cache-off runs: `gh workflow run ci.yml -f uv_cache=false` (D83). The repo secret `DEMO_SECRET` (value `hello`) was created 7 Nov 2026.
+- Found while building: Pydantic's settings errors repeated the start and end of the values they were given, which could show part of `JWT_SECRET` or the database password (e.g. the Slice 8 "stale must be bigger than heartbeat" error). Fixed with `hide_input_in_errors`; test proves it (fails without the fix). Noted in D80.
+- Changed from the plan: `OLLAMA_URL` (like `DATABASE_URL`) is fixed in compose, not taken from `.env`, so a `.env` written for the Mac (`localhost:11434`) can't point the containers at the wrong address.
+- The worker no longer creates tables (D78). On a database with no tables, a worker started on its own (outside compose) logs errors every second until the API has started once.
+- **Limit:** the published image is built on GitHub's machines for Intel/AMD (linux/amd64) only. `docker compose up` builds locally, so it works on any Mac; pulling the GHCR image onto an Apple-chip Mac runs it through emulation (slower).
+- **Limit:** in demo mode the database is written once a second per running job (D81).
+- Code review fixes (Adar approved both): (1) compose gave the image a fixed name (`kuyruk:local`), so the clean-machine check overwrote and then deleted the normal setup's image and the shared Postgres image, against D86. Now there is no fixed name (images are named after the project, e.g. `kuyruk-api`), and the check removes only images it built (`--rmi local`); rerun 19/19 PASS, Postgres image kept. (2) Two quick pushes to main could leave `latest` on the older commit. Releases now run one at a time, and `latest` moves only if the commit is still the newest on main (D85 updated). Cost: if a third release arrives while one runs and one waits, the waiting one is dropped and its commit gets no image.
+- Flaky Slice 7 test fixed (test only): `test_stream_keeps_going_after_the_pass_expires` failed once in CI (POST /jobs got 401). Its 1-second pass could last almost 0 s, because JWT expiry is stored in whole seconds. Now a 2-second pass (really 1–2 s), and the test waits until the pass has truly expired. 10/10 local runs passed.
+- The clean-machine check keeps the Postgres image (pinned by digest, so it is always the same one); `--pull` only refreshes the Python and uv images used to build.
+- Local Docker setup: the database port moved to 127.0.0.1:5432; the local volume and `.env` were not touched (Postgres tests still use `kuyruk_test`).
+
 ## Session log
 - 6 Nov 2026 — Planning finished in Claude app. Starting documents created. Tools installed. Decision log D01–D41 approved.
 - 6 Nov 2026 — Slice 0 done: uv project (Python 3.12, exact pins + `uv.lock`), folders, `app/settings.py`, `/health` + tests, `.env.example`, `.gitignore`, MIT licence, placeholder README, `ci.yml` (ruff + pytest, 85% gate).
@@ -121,3 +137,4 @@ Slice 8 (limits for the README, and leftovers):
 - 7 Nov 2026 — Slice 6 done: 10-in-a-row reading confirmed and Slice 5 review finding 3 accepted (both open items removed). Daily budget: `enforce_daily_budget` on POST /jobs (llm only; replay first; tokens on hidden text; 422 `job_exceeds_daily_budget` if bigger than the whole limit; per-user lock, FOR UPDATE on Postgres; 429 `budget_exceeded` + Retry-After), `GET /me/budget`, `DAILY_TOKEN_BUDGET` setting. Review fix: job saved with the check time (midnight edge). D57–D62 approved; spec 3.1 updated.
 - 7 Nov 2026 — Slice 7 built (awaiting review/commit): POST /jobs body and Idempotency-Key now read once (`CheckedJob`), de-duplication removed from the 422 handler, test proves each error appears once. `GET /jobs/{ticket}/events` with FastAPI's built-in SSE: login + 404 checked once at open, snapshot, changes only (look every 0.5 s), `end` with final state, keep-alive after 15 quiet seconds, stops at once on disconnect, short sessions on helper threads. Settings `EVENTS_POLL_SECONDS`, `EVENTS_KEEPALIVE_SECONDS`. D63–D67 approved; spec 6.1 updated.
 - 7 Nov 2026 — Slice 8 done: crash recovery (`take_over_stuck_job`: stuck = no heartbeat for 30 s by the database's clock, stuck jobs before queued, compare-and-swap takeover, at most 3 takeovers then failed "Crashed too many times", continues with waiting texts only), tries saved after each finished attempt, a worker that lost its job stops, "text started" log line for E2, `recovered` event, `POST /demo/crash-worker` with `DEMO_MODE` (default false), settings `STALE_AFTER_SECONDS`, `MAX_CRASH_COUNT`, `DEMO_MODE`. Postgres tests: two worker processes on 30 jobs, takeover race, real `kill -9`, real SIGTERM. D68–D75 and spec 5 update approved. Review: a polite stop now hands the job back (D76, approved).
+- 7 Nov 2026 — Slice 9 built (awaiting review/merge): production `Dockerfile` (two stages, uv 0.13.7 and python 3.12.16-slim pinned by digest, non-root user, OCI labels), `.dockerignore`, compose with api/worker/db, healthchecks (worker: alive file), demo mode by default with demo-only secrets (refused outside demo mode), 12 s stop grace, `ci.yml` with a Postgres service and the E4 secret check, `release.yml` (workflow_run after CI on main, GHCR), double-send test on Postgres, `scripts/clean_machine_check.py` (19/19 PASS). D77–D86 approved.

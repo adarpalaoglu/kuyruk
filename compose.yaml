@@ -1,10 +1,66 @@
 # Docker Compose file: describes the programs ("services") Kuyruk runs in
-# containers, so one command (`docker compose up`) starts them all.
+# containers, so one command (`docker compose up`) starts them all:
 #
-# For now (Slice 1) it holds only the database. The API, worker and web
-# interface are added in Slice 9.
+#   db      the Postgres 16 database (users, jobs, texts)
+#   api     the web service: /docs, /register, /jobs ... at http://localhost:8000
+#   worker  the separate program that does the jobs (spec 7)
 #
-# Docker reads POSTGRES_PASSWORD from the local `.env` file (never committed).
+# (The web interface is added in Slice 17.)
+#
+# Start order: db healthy -> api starts, creates the tables, healthy -> worker
+# starts (D78).
+#
+# DEMO MODE BY DEFAULT (D80). With no `.env` file, everything below falls back
+# to clearly labelled demo-only values, so Kuyruk runs on a clean machine with
+# nothing to fill in: the fake AI, short heartbeat times, the crash button on,
+# and a public demo password and login key. Those are not secrets (they are
+# written right here), which is why Kuyruk refuses the demo login key unless
+# DEMO_MODE is true, and why the ports below open only to this computer.
+#
+# REAL USE: copy .env.example to .env and set real secrets and DEMO_MODE=false
+# (see .env.example). `${NAME:-value}` means "NAME from .env (or the shell) if
+# set, otherwise value", so anything in .env wins.
+
+# Settings shared by the api and the worker (`&kuyruk-app` names this block;
+# `<<: *kuyruk-app` below pastes it in).
+x-kuyruk-app: &kuyruk-app
+  # Both are built from ./Dockerfile. No fixed image name on purpose: Docker
+  # names the images after the project (e.g. kuyruk-api, kuyruk-worker), so
+  # a second project, such as the clean-machine check (kuyruk-check), never
+  # overwrites or deletes this one's images (D86). The two share every layer,
+  # so the second name costs no extra disk space.
+  build: .
+  # Every other setting in .env (e.g. DAILY_TOKEN_BUDGET) reaches Kuyruk too.
+  # "required: false": no .env is fine (the demo).
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    DEMO_MODE: ${DEMO_MODE:-true}
+    # The public demo login key (app/settings.py DEMO_JWT_SECRET). Refused
+    # outside demo mode.
+    JWT_SECRET: ${JWT_SECRET:-demo-only-jwt-secret-public-not-for-real-use}
+    # "db" is the database container's name on Docker's private network.
+    # Always built here; a DATABASE_URL in .env (for the Mac) doesn't apply.
+    DATABASE_URL: postgresql+psycopg://kuyruk:${POSTGRES_PASSWORD:-demo-only-db-password}@db:5432/kuyruk
+    # The fake AI, replaying realistic waiting times. Until Slice 10 measures
+    # the real AI, the times come from a labelled placeholder (D82).
+    AI_BACKEND: ${AI_BACKEND:-fake}
+    FAKE_AI_WAIT_MODE: ${FAKE_AI_WAIT_MODE:-replay}
+    FAKE_AI_REPLAY_FILE: ${FAKE_AI_REPLAY_FILE:-bench/data/placeholder_times.csv}
+    # Demo timings (D81): a heartbeat every second and "stuck" after 5 seconds
+    # without one, so a crash is recovered within seconds on screen. Real use
+    # sets 5 and 30 in .env (the defaults in app/settings.py).
+    HEARTBEAT_SECONDS: ${HEARTBEAT_SECONDS:-1}
+    STALE_AFTER_SECONDS: ${STALE_AFTER_SECONDS:-5}
+    # Ollama runs on the Mac itself, not in Docker (D08). From inside a
+    # container, the Mac is "host.docker.internal". Fixed here, like
+    # DATABASE_URL, so a .env written for running Kuyruk directly on the Mac
+    # (localhost addresses) can't point the containers at the wrong place.
+    OLLAMA_URL: http://host.docker.internal:11434
+    # The worker's "I'm alive" file for its health check (D79). Only the
+    # worker writes it; the API ignores this setting.
+    WORKER_ALIVE_FILE: /tmp/kuyruk-worker-alive
 
 services:
   db:
@@ -15,12 +71,13 @@ services:
     environment:
       POSTGRES_USER: kuyruk
       POSTGRES_DB: kuyruk
-      # The ":?" form stops with this message if the password is missing,
-      # instead of starting a database with no password.
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      # From .env for real use; otherwise the public demo password (D80).
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-demo-only-db-password}
     ports:
-      # Lets programs on the Mac reach the database at localhost:5432.
-      - "5432:5432"
+      # Lets programs on this computer reach the database at localhost:5432
+      # (e.g. the Postgres tests). 127.0.0.1 = this computer only: with a
+      # public demo password, other machines on the network must not get in.
+      - "127.0.0.1:5432:5432"
     volumes:
       # Keep the data in a named Docker volume so it survives restarts.
       - db-data:/var/lib/postgresql/data
@@ -31,6 +88,69 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+      # While starting, check every second, so the others can start sooner.
+      start_period: 30s
+      start_interval: 1s
+
+  api:
+    <<: *kuyruk-app
+    # The image's own start command: uvicorn serving the API.
+    ports:
+      # Open http://localhost:8000/docs in a browser. This computer only.
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # Ask GET /health. The image has no curl, so Python does it; any error
+      # (no answer, not 200) makes it exit with an error code: unhealthy. The
+      # API only answers after its start-up step has created the tables, so
+      # "healthy" also means "tables exist" (D78).
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+      start_interval: 1s
+
+  worker:
+    <<: *kuyruk-app
+    # Python itself is the container's first process (not `uv run`), so
+    # Docker's stop signal (SIGTERM) and kill signal (SIGKILL) reach the worker
+    # directly. With `uv run` in between, a kill stopped only uv while the
+    # worker carried on (found in Slice 8).
+    command: ["python", "-m", "app.worker"]
+    depends_on:
+      # Only the API creates tables, so the worker waits until it is healthy.
+      api:
+        condition: service_healthy
+    # If the worker stops for any reason (a crash, or the demo crash button),
+    # Docker starts it again at once, and the new worker takes over the stuck
+    # job (spec 7.1). Only `docker compose stop`/`down` stops it for good.
+    restart: unless-stopped
+    # After asking the worker to stop, Docker waits this long before killing
+    # it. Must be above SHUTDOWN_GRACE_SECONDS (8 s), the worker's own wait for
+    # texts still with the AI (D55).
+    stop_grace_period: 12s
+    # Makes host.docker.internal (Ollama's address above) work on Linux too;
+    # Docker Desktop on a Mac already provides it. On Linux, Ollama must also
+    # listen beyond localhost (OLLAMA_HOST=0.0.0.0).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      # Healthy while the worker keeps re-dating its "I'm alive" file: about
+      # every second when idle, every heartbeat during a job (D79). Docker only
+      # reports "unhealthy"; a crashed worker is restarted by `restart` above.
+      test: ["CMD", "python", "-m", "app.worker", "--check-alive"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+      start_interval: 1s
 
 volumes:
   db-data:

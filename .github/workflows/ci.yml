@@ -1,12 +1,24 @@
 # GitHub Actions workflow (an automatic checklist GitHub runs on its own
 # computers). On every push and pull request it installs Kuyruk, checks code
-# style with ruff, and runs the tests with the 85% coverage gate. A red cross on
-# GitHub means one of these steps failed.
+# style with ruff, runs the fast tests with the 85% coverage gate, then runs
+# the Postgres tests against a real Postgres database. A red cross on GitHub
+# means one of these steps failed. When CI passes for a push to main,
+# release.yml publishes the image (D84).
 name: CI
 
 on:
   push:
   pull_request:
+  # A manual run (GitHub's "Run workflow" button, or
+  # `gh workflow run ci.yml -f uv_cache=false`), used by experiment E4 to time
+  # runs with uv's download cache off and on (D83). Pushes and pull requests
+  # always use the cache.
+  workflow_dispatch:
+    inputs:
+      uv_cache:
+        description: "Use uv's download cache"
+        type: boolean
+        default: true
 
 # Read-only access to the repository: this workflow never needs to change it.
 permissions:
@@ -17,16 +29,50 @@ jobs:
     # An exact machine image, so results don't change when GitHub updates
     # "ubuntu-latest".
     runs-on: ubuntu-24.04
+
+    # A Postgres 16 database next to the tests (a "service container"), the
+    # same image and fingerprint as in compose.yaml. It holds only test data
+    # and lives for this run only, so its password is a throwaway, not a
+    # secret.
+    services:
+      postgres:
+        image: postgres:16.15-alpine@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
+        env:
+          POSTGRES_USER: kuyruk
+          POSTGRES_PASSWORD: ci-only-throwaway-password
+          POSTGRES_DB: kuyruk_test
+        ports:
+          - 5432:5432
+        # Wait until Postgres accepts connections before the steps start.
+        options: >-
+          --health-cmd "pg_isready -U kuyruk -d kuyruk_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+
     steps:
       # Actions are pinned to a fixed commit (the long hex code) rather than a
       # movable tag, so nobody can change what runs here behind our back.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # E4 (D36): record whether this kind of run can see a repository secret.
+      # Only "yes" or "no" is printed, never the value. On a pull request from
+      # a fork, GitHub hides secrets, so it would say "no".
+      - name: Secret check (E4)
+        env:
+          DEMO_SECRET: ${{ secrets.DEMO_SECRET }}
+          EVENT: ${{ github.event_name }}
+          FROM_FORK: ${{ github.event.pull_request.head.repo.fork || false }}
+        run: |
+          if [ -n "$DEMO_SECRET" ]; then present=yes; else present=no; fi
+          echo "event: $EVENT · from fork: $FROM_FORK · secret present: $present"
+
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: "0.13.7"
-          # Reuse downloaded libraries between runs to save time.
-          enable-cache: true
+          # Reuse downloaded libraries between runs to save time; off only in
+          # a manual run with uv_cache=false (E4).
+          enable-cache: ${{ github.event_name != 'workflow_dispatch' || inputs.uv_cache }}
 
       # --locked: fail if uv.lock doesn't match pyproject.toml, instead of
       # quietly installing different versions.
@@ -39,5 +85,14 @@ jobs:
           uv run ruff check .
           uv run ruff format --check .
 
-      - name: Tests (coverage gate 85%)
-        run: uv run pytest
+      # Everything except the Postgres tests, on SQLite and the fake AI.
+      - name: Fast tests (coverage gate 85%)
+        run: uv run pytest -m "not postgres"
+
+      # The tests that need real Postgres (budget race, double send, two
+      # workers, kill -9, polite stop). -v lists each one, so the log shows
+      # them PASSED, not skipped. Coverage was already checked above.
+      - name: Postgres tests
+        env:
+          POSTGRES_TEST_URL: postgresql+psycopg://kuyruk:ci-only-throwaway-password@localhost:5432/kuyruk_test
+        run: uv run pytest -m postgres -v --no-cov

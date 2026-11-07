@@ -11,6 +11,13 @@ from typing import Literal
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# The login-pass key that compose.yaml uses when there is no `.env`, so that
+# `docker compose up` works on a clean machine (D80). It is public (it is in
+# this file and on GitHub), so anyone could forge login passes with it. That is
+# fine for a demo on one's own computer and never fine for real use: Kuyruk
+# refuses to start with it unless DEMO_MODE is true (see the check below).
+DEMO_JWT_SECRET = "demo-only-jwt-secret-public-not-for-real-use"
+
 
 class Settings(BaseSettings):
     """All of Kuyruk's adjustable values, read from the environment or `.env`.
@@ -23,8 +30,14 @@ class Settings(BaseSettings):
     # shared `.env` (which also holds Postgres's own settings) doesn't break us.
     # Treat an empty value (e.g. "DATABASE_URL=" copied from .env.example) as
     # "not set", so the default below is used instead of an empty string.
+    # hide_input_in_errors: when a setting is wrong, the error message must not
+    # repeat the values it was given; otherwise it shows the start and end of
+    # them, which can include part of JWT_SECRET or the database password.
     model_config = SettingsConfigDict(
-        env_file=".env", extra="ignore", env_ignore_empty=True
+        env_file=".env",
+        extra="ignore",
+        env_ignore_empty=True,
+        hide_input_in_errors=True,
     )
 
     # The name shown at the top of the automatic API documentation page.
@@ -163,6 +176,14 @@ class Settings(BaseSettings):
     # (D74). Off by default: outside demo mode that address answers 404.
     demo_mode: bool = False
 
+    # The worker's "I'm alive" file (D79), for Docker's health check. When a
+    # path is set, the worker touches (re-dates) the file on every pass of its
+    # loop and at every heartbeat; `python -m app.worker --check-alive` then
+    # says "healthy" only if the file is younger than the maximum age. Empty =
+    # off (tests and runs on the Mac write no file); compose.yaml sets a path.
+    worker_alive_file: str = ""
+    worker_alive_max_age_seconds: float = Field(default=30.0, gt=0)
+
     @model_validator(mode="after")
     def check_stale_after_heartbeat(self) -> "Settings":
         """Refuse to start if a healthy job could look stuck (D68).
@@ -175,6 +196,24 @@ class Settings(BaseSettings):
         if self.stale_after_seconds <= self.heartbeat_seconds:
             raise ValueError(
                 "STALE_AFTER_SECONDS must be bigger than HEARTBEAT_SECONDS."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def check_demo_secret_only_in_demo_mode(self) -> "Settings":
+        """Refuse to start with the public demo login key outside demo mode.
+
+        compose.yaml supplies DEMO_JWT_SECRET when there is no `.env`, so a
+        visitor can try Kuyruk at once (D80). Because that key is public,
+        anyone could forge a login pass with it; it is only acceptable while
+        DEMO_MODE is on, which says "this is a demo, not real use".
+        """
+        if not self.demo_mode and self.jwt_secret.get_secret_value() == (
+            DEMO_JWT_SECRET
+        ):
+            raise ValueError(
+                "JWT_SECRET is the public demo key. Set a real JWT_SECRET in "
+                ".env, or DEMO_MODE=true for a demo."
             )
         return self
 

@@ -1,0 +1,26 @@
+# Files Docker leaves out when it builds Kuyruk's image (the "build context").
+# Above all .env: secrets must never end up inside an image, which may be
+# shared or published. The rest is not needed to run Kuyruk, and leaving it out
+# keeps builds fast and stops a change to e.g. the docs from invalidating
+# Docker's cached layers.
+.env
+.env.*
+!.env.example
+.git
+.github
+.venv
+**/__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.coverage
+.coverage.*
+htmlcov
+coverage.xml
+kuyruk.db
+.DS_Store
+docs
+tests
+web
+scripts
+docker
