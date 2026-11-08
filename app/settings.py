@@ -179,6 +179,15 @@ class Settings(BaseSettings):
     # (D74). Off by default: outside demo mode that address answers 404.
     demo_mode: bool = False
 
+    # Experiment E1 (spec 9.1, D95). When true, the experiment-only addresses
+    # under /experiments/e1/ are switched on: a slow step written the wrong
+    # and the right way, to measure how much a wrong one freezes the API. Off
+    # by default (404), and never allowed together with demo mode. The slow
+    # step may wait at most E1_MAX_WAIT_SECONDS, so nobody can freeze the API
+    # for long by accident.
+    experiments_enabled: bool = False
+    e1_max_wait_seconds: float = Field(default=10.0, gt=0)
+
     # The worker's "I'm alive" file (D79), for Docker's health check. When a
     # path is set, the worker touches (re-dates) the file on every pass of its
     # loop and at every heartbeat; `python -m app.worker --check-alive` then
@@ -199,6 +208,21 @@ class Settings(BaseSettings):
         if self.stale_after_seconds <= self.heartbeat_seconds:
             raise ValueError(
                 "STALE_AFTER_SECONDS must be bigger than HEARTBEAT_SECONDS."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def check_experiments_never_in_demo_mode(self) -> "Settings":
+        """Refuse to start with the experiment addresses on in demo mode (D95).
+
+        Some experiment addresses freeze the whole API on purpose (that is
+        what E1 measures). A demo is for visitors, so they must never be
+        reachable there.
+        """
+        if self.experiments_enabled and self.demo_mode:
+            raise ValueError(
+                "EXPERIMENTS_ENABLED and DEMO_MODE can't both be true: the "
+                "experiment addresses freeze the API on purpose."
             )
         return self
 

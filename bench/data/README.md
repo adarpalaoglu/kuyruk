@@ -51,3 +51,22 @@ queue.
 
 The earlier `placeholder_times.csv` (ten rough guesses, D82) was deleted in
 Slice 10.
+
+## E1 — blocking the event loop (Slice 11)
+
+Made by `bench/e1_load.py` (D96–D98); setup in `setup.md`. Every row has
+`kind` (`sleep`: the timed waits; `ai`: the real-AI check), `setting` (mode
+and number of slow requests, e.g. `B100`), `mode`, `slow_requests`,
+`wait_seconds` (empty for `ai`) and `repeat`. All times are counted from the
+run's time zero, when all slow requests were sent.
+
+- `e1_runs.csv` — one row per run (95): `order_in_repeat`, `started_at`; for
+  `health` and `ping`: number of probes, p50, p95 and max in milliseconds;
+  the first, median and last slow-request finish in seconds;
+  `server_step_median_s` (how long the slow step itself took, as the server
+  measured it); `errors`; `max_probe_late_ms` (the clock check).
+- `e1_probes.csv` — every probe (46,532): `target` (`health` or `ping`),
+  `planned` (when it was meant to leave), `sent` (when it left), `seconds`
+  (time to its full answer), `ok`, `error`.
+- `e1_slow.csv` — every slow request (5,150): `index`, `finished`,
+  `server_seconds`, `ok`, `error`.

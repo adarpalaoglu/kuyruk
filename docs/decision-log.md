@@ -504,6 +504,35 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 
 ---
 
+## Experiment E1 (Slice 11)
+
+### D95 — Experiment addresses are off by default and never in the demo
+- **Decision:** the E1 addresses (`/experiments/e1/…`) exist only with `EXPERIMENTS_ENABLED=true`; otherwise they answer 404 and are hidden from /docs. Kuyruk refuses to start with it and demo mode both on.
+- **Why:** the bad modes freeze the API on purpose; nobody should reach them by accident.
+- **Date:** 8 Nov 2026 · **Status:** Approved (8 Nov 2026)
+
+### D96 — What the E1 load test measures (HAND-DESIGNED)
+- **Decision:** probes every 100 ms on a fixed clock, without waiting for the last answer: the real `/health` (unchanged, plain `def`) and an `async def` ping. A probe's time runs from sending to the full answer. A slow request's finish time is counted from the moment all were sent. Errors are counted, never dropped. Safeguards so the test measures Kuyruk, not itself: no client connection limit, 900 s timeouts (longer than the longest run), server backlog 4096 with macOS's cap (`kern.ipc.somaxconn`) checked, open-files limit 10,240; every probe records when it was meant to leave and when it left, and lateness over 20 ms is reported. The probes are sent from their own process, started fresh for each run, after one unrecorded warm-up probe of each kind, so a burst of slow replies in the load test can't delay them (found in the trial: 82 ms late in one process). All limits are written to `bench/data/setup.md`.
+- **Why:** waiting for answers would hide the worst moments; two probes separate "loop stuck" from "threads used up".
+- **Date:** 8 Nov 2026 · **Status:** Approved (8 Nov 2026)
+
+### D97 — E1 runs: one server, 4 settings × 4 waits × 5 repeats, interleaved
+- **Decision:** A50, B50, C50, B100 at waits of 0.5 / 1 / 2 / 4 s; one uvicorn process; warm-up not recorded; a fixed shuffled order per repeat; each run's numbers are the p50/p95 of that run, and results report the median and spread (min–max) of the 5 runs.
+- **Why:** same protocol as spec 9; interleaving spreads drift (as in D91).
+- **Date:** 8 Nov 2026 · **Status:** Approved (8 Nov 2026)
+
+### D98 — E1 real-AI check: 10 texts, 5 repeats, warm Mac
+- **Decision:** 10-minute heat-up (D94), memory emptied and 3 warm-ups before every run (D89), same 10 reviews each run. The blocking client is a plain `httpx.Client` sending exactly Kuyruk's request. On the chart, the points sit at the median AI answer time measured in that check's mode-A runs (where answers run one after another, so each is one clean AI time).
+- **Why:** fewer requests because Ollama answers one at a time (D88), so 50 would take minutes per run without showing anything new.
+- **Date:** 8 Nov 2026 · **Status:** Approved (8 Nov 2026)
+
+### D99 — /health is async def
+- **Decision:** /health is `async def`.
+- **Why:** E1 showed that when the ~40 helper threads are full, a plain-def /health waits for a thread too (B50 p95 ≈ 0.9 × the wait), so Docker's health check could mark a busy but working API as unhealthy. The async ping stayed at 5–8 ms. Cost: none; /health does no blocking work.
+- **Date:** 8 Nov 2026 · **Status:** Approved (8 Nov 2026)
+
+---
+
 ## Presentation
 
 ### D38 — A full, professional web interface, equal to /docs

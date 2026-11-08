@@ -3,7 +3,7 @@
 Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12 lists the slices).
 
 ## Current slice
-**Slice 11 — E1** (not started). Slice 10 done.
+**Slice 12 — E2** (not started). Slice 11 done.
 
 ## Slices
 
@@ -20,7 +20,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 | 8 | Crash recovery + two workers | ☑ | 454 tests (5 on Postgres), 99.9% coverage; real kill -9 run on Postgres 16: 20/20 ok, crash count 1, 4 texts redone |
 | 9 | Docker, compose, release workflow | ☑ | 466 tests (6 on Postgres), 99.7% coverage (fast suite); clean-machine check 19/19 PASS; image 328 MB (71 MB compressed); CI + release green, image public on GHCR |
 | 10 | Measure the real AI | ☑ | 491 tests (6 on Postgres), 99.7% coverage (fast suite); 100 synthetic reviews measured on real Gemma, warm Mac: 1.78 s median per text alone; 1/2/4/8 at once all ≈ 182 s for 100 texts (no speed-up) |
-| 11 | E1 | ☐ | Prediction written? ☐ |
+| 11 | E1 | ☑ | Prediction written? ☑ (pushed first, d809ba5). 554 tests (6 on Postgres skipped locally), 99.7% coverage; 95 runs + 10 after-fix runs, 0 errors; /health p95 at 1 s wait: A 61.7 s, B50 0.87 s → 5.6 ms and B100 1.85 s → 6.0 ms after D99, C 6.4 ms |
 | 12 | E2 | ☐ | Prediction written? ☐ |
 | 13 | E3 | ☐ | Prediction written? ☐ |
 | 14 | E4 | ☐ | Prediction written? ☐ |
@@ -38,6 +38,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 - D68–D75 (crash recovery) and the spec 5 update (two new Job fields) · Approved by Adar: ☑ (7 Nov 2026); D74 update (crash mark also checked before each text) approved 7 Nov 2026
 - D76 (polite stop hands the job back) and the D55 / D70 wording updates, from the Slice 8 code review · Approved by Adar: ☑ (7 Nov 2026)
 - D77–D86 (Docker, demo mode, CI, release) and the D55 note (compose sets 12 s) · Approved by Adar: ☑ (7 Nov 2026)
+- D95–D98 (E1) · Approved by Adar: ☑ (8 Nov 2026); D96 addition (probes from their own process) approved 8 Nov 2026; D99 (/health is async def, Adar's decision and wording) 8 Nov 2026
 - D87–D93 (real AI measurements; D88 and D93 reworded as Adar asked) and the D82 "done" note · Approved by Adar: ☑ (8 Nov 2026); D89 update (memory emptied before every run) and D91 addition approved 8 Nov 2026; D94 (10-minute heat-up) approved 8 Nov 2026
 
 ## Interface parity (fill in at slice 17)
@@ -139,6 +140,17 @@ Slice 10 (limits for the README, and leftovers):
 - Code review fixes (Adar approved all three, all in `bench/measure_ollama.py`): the two "only" options can no longer be combined (together they measured nothing but noted a rerun); a full rerun adds a dated section to `setup.md` instead of erasing it; an unexpected reply at Ollama's address gives the plain "Ollama doesn't answer" message instead of a crash. Tests added for each.
 - The 100 texts are synthetic, written by Claude (D87); Adar checked 20 at random. In about two-thirds of the long ones the writer adds a paragraph after signing off; left as is.
 
+Slice 11 (E1, limits for the README, and leftovers):
+- **Key numbers** (one uvicorn process, MacBook Air M4, plugged in; `docs/experiments.md`): /health p95 while 50 slow requests run, at waits 0.5 / 1 / 2 / 4 s: A 25.8 / 61.7 / 132 / 252 s; B50 0.41 / 0.87 / 1.77 / 3.58 s; B100 0.92 / 1.85 / 3.71 / 7.41 s; C 6.4 / 6.4 / 6.4 / 6.9 ms. Real AI (10 texts): A 13.5 s, B 6.0 ms, C 6.1 ms; all three took ~13.5–13.9 s for the 10 texts (Ollama one at a time, D88).
+- Prediction: A and C right; B's "10 wait, twice as long" right; B's "/health stays fast" partly wrong (p50 fast, p95 ≈ 0.9 × the wait, because /health is a plain `def` and needs a helper thread too).
+- **For Adar:** write "Why it happens" and "Takeaway" for E1 in `docs/experiments.md` in his own words (placeholders marked).
+- **/health is now `async def` (D99, Adar's decision).** Confirmation run (B50 and B100 at 1 s, 5 repeats): /health p95 867 ms → 5.6 ms and 1,846 ms → 6.0 ms; the slow requests finish as before. A test proves it (45 plain-def requests fill every helper thread; /health still answers in < 0.1 s; the test fails with the old plain-def /health).
+- Code review fixes (all approved by Adar, 1–9; 10 kept): the load test can no longer hang if its probe process dies (clear error instead; test); the charts and key numbers draw and print partial or failed data (gaps / "n/a") instead of crashing, and the finish chart counts only answered requests and cuts no run short; the experiment addresses are now added to Kuyruk only when switched on, so any method gives 404 and /docs can't disagree (D95's wording now holds exactly); modes A/B judge Ollama's reply exactly like mode C (shared `OllamaAI.answer_from`); one shared `make_ollama_ai` builds the Ollama client from settings (worker, E1, measuring script); AI texts are limited to MAX_TEXT_CHARS (2,000). Kept (10): the load test's numbers stay in `bench/e1_load.py` as the experiment's design (D96–D98), with a sentence explaining why.
+- **For E2 and later measurements:** macOS's connection-queue cap was raised with `sudo sysctl -w kern.ipc.somaxconn=4096` (in the Terminal app, not with `!`, which can't ask for a password). A Mac restart puts it back to 128; `bench/e1_load.py` refuses to run until it is raised again.
+- Clock check: 255 of 46,532 probes (0.5%) left more than 20 ms late (details in `bench/data/setup.md`); 0 errors.
+- `OllamaAI.chat_request` now builds the request body (no change in behaviour), so the E1 blocking client sends exactly Kuyruk's request.
+- Rerun: `caffeinate -dims uv run python -m bench.e1_load` (about 65 minutes; `--sleep-only` / `--ai-only` redo one part; `--trial DIR` is a 2-minute check). Charts: `uv run --group bench python -m bench.charts`.
+
 ## Session log
 - 6 Nov 2026 — Planning finished in Claude app. Starting documents created. Tools installed. Decision log D01–D41 approved.
 - 6 Nov 2026 — Slice 0 done: uv project (Python 3.12, exact pins + `uv.lock`), folders, `app/settings.py`, `/health` + tests, `.env.example`, `.gitignore`, MIT licence, placeholder README, `ci.yml` (ruff + pytest, 85% gate).
@@ -152,3 +164,4 @@ Slice 10 (limits for the README, and leftovers):
 - 7 Nov 2026 — Slice 8 done: crash recovery (`take_over_stuck_job`: stuck = no heartbeat for 30 s by the database's clock, stuck jobs before queued, compare-and-swap takeover, at most 3 takeovers then failed "Crashed too many times", continues with waiting texts only), tries saved after each finished attempt, a worker that lost its job stops, "text started" log line for E2, `recovered` event, `POST /demo/crash-worker` with `DEMO_MODE` (default false), settings `STALE_AFTER_SECONDS`, `MAX_CRASH_COUNT`, `DEMO_MODE`. Postgres tests: two worker processes on 30 jobs, takeover race, real `kill -9`, real SIGTERM. D68–D75 and spec 5 update approved. Review: a polite stop now hands the job back (D76, approved).
 - 7 Nov 2026 — Slice 9 done: production `Dockerfile` (two stages, uv 0.13.7 and python 3.12.16-slim pinned by digest, non-root user, OCI labels), `.dockerignore`, compose with api/worker/db, healthchecks (worker: alive file), demo mode by default with demo-only secrets (refused outside demo mode), 12 s stop grace, `ci.yml` with a Postgres service and the E4 secret check, `release.yml` (workflow_run after CI on main, GHCR), double-send test on Postgres, `scripts/clean_machine_check.py` (19/19 PASS). D77–D86 approved. Review: no fixed image name, `latest` only for the newest commit (D85 updated); flaky Slice 7 pass-expiry test fixed.
 - 8 Nov 2026 — Slice 10 done: 100 synthetic Turkish reviews (`bench/data/reviews_tr.csv`), `bench/measure_ollama.py` (setup check and notes, memory emptied and 3 warm-ups before every run, one at a time, 1/2/4/8 at once × 3 interleaved, Kuyruk's own `prepare_for_ai` and `OllamaAI`), `bench/charts.py` (3 charts in `docs/charts/`), fake AI replays the 4-at-once times by default, placeholder deleted. Findings: one request at a time (MLX engine), prefix cache, Mac slows when warm (one-at-a-time redone after a 10-minute heat-up; cool run kept). D87–D94 approved. Review: three small fixes in the measuring script.
+- 8 Nov 2026 — Slice 11 done: prediction pushed first (d809ba5). Experiment addresses `/experiments/e1/…` (off by default, 404, never with demo mode; D95), `bench/e1_load.py` (fixed-clock probes from their own process, safeguards checked and recorded; D96–D98), 80 sleep runs + 15 real-AI runs, two charts, `docs/experiments.md` E1 method/results/surprises filled. D95–D98 approved. Review: fixes 1–9 done, 10 kept; /health made async def (D99) and confirmed with a short rerun.

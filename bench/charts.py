@@ -1,4 +1,4 @@
-"""Draw the Slice 10 charts from the measured CSV files, and print key numbers.
+"""Draw the experiment charts from the measured CSV files, and print key numbers.
 
 Slice 10 (spec 9.0). Reads only the CSV files in `bench/data/` made by
 `bench/measure_ollama.py`, so anyone can redraw the charts without Ollama.
@@ -13,6 +13,17 @@ Writes three pictures (PNG files) to `docs/charts/`:
 It also prints the key numbers: median, 5th and 95th percentile per text, the
 median total time at each setting, and where it stops getting faster (D93).
 
+E1 (Slice 11, spec 9.1), from the files made by `bench/e1_load.py`, if they
+exist:
+
+- `e1_health_p95.png`: how slow /health's unlucky answers (p95) get while the
+  slow requests run, against the wait time, one line per setting; real-AI
+  points marked;
+- `e1_slow_finish.png`: when each slow request finished, per setting.
+
+And the E1 key numbers: per setting and wait, the median (and min-max) of the
+5 runs (D97).
+
 matplotlib (the charting library) is in the separate `bench` dependency group,
 so Kuyruk itself, its tests and its Docker image don't need it. Run:
 
@@ -21,6 +32,7 @@ so Kuyruk itself, its tests and its Docker image don't need it. Run:
 
 import csv
 import statistics
+from itertools import zip_longest
 from pathlib import Path
 
 import matplotlib
@@ -43,6 +55,17 @@ TEXT = "#0b0b0b"
 MUTED = "#52514e"
 GRID = "#e4e3df"
 SURFACE = "#fcfcfb"
+
+# E1: one fixed colour and marker shape per setting (the shape also tells the
+# settings apart without colour). Checked with the dataviz palette validator.
+E1_STYLE = {
+    "A50": ("#eb6834", "o", "A: async def + time.sleep (50)"),
+    "B50": ("#2a78d6", "s", "B: plain def (50)"),
+    "B100": ("#eda100", "D", "B: plain def (100, more than the threads)"),
+    "C50": ("#1baf7a", "^", "C: async def + await asyncio.sleep (50)"),
+}
+# The wait shown on the finish-time chart.
+E1_FINISH_WAIT = 2.0
 
 
 def read(name: str) -> list[dict]:
@@ -218,8 +241,295 @@ def summary(name: str, times: list[float]) -> str:
     )
 
 
+# ---- E1 ---------------------------------------------------------------------
+
+
+def median_and_spread(values: list[float]) -> str:
+    """ "median (min-max)" of some numbers, for the printed key numbers."""
+    return f"{statistics.median(values):.1f} ({min(values):.1f}-{max(values):.1f})"
+
+
+def by_setting(rows: list[dict], column: str) -> dict[tuple[str, float], list[float]]:
+    """{(setting, wait): [one value per run]} for one column of e1_runs.csv."""
+    grouped: dict[tuple[str, float], list[float]] = {}
+    for row in rows:
+        if row[column] != "":
+            key = (row["setting"], float(row["wait_seconds"] or 0))
+            grouped.setdefault(key, []).append(float(row[column]))
+    return grouped
+
+
+def e1_health_chart(
+    sleep: list[dict], ai: list[dict], after_fix: list[dict] | None = None
+) -> None:
+    """/health p95 against the wait, one line per setting, log scales.
+
+    Dots: the 5 runs; line: their median (D97). Faint dashed line: the async
+    ping's p95 median, which needs no helper thread. Real-AI points: hollow
+    marks at the AI's typical answer time (median of the mode-A runs, D98).
+    """
+    health = by_setting(sleep, "health_p95_ms")
+    ping = by_setting(sleep, "ping_p95_ms")
+    figure, axes = plt.subplots(figsize=(9, 7))
+    waits = sorted({wait for _, wait in health})
+    for setting, (colour, marker, name) in E1_STYLE.items():
+        # Only the waits this setting has data for: a stopped run, or a run
+        # where every probe failed, leaves gaps (drawn as gaps, not zeros).
+        have = [w for w in waits if health.get((setting, w))]
+        if not have:
+            continue
+        for wait in have:
+            values = health[(setting, wait)]
+            axes.scatter([wait] * len(values), values, s=14, color=colour, alpha=0.35)
+        medians = [statistics.median(health[(setting, w)]) for w in have]
+        axes.plot(
+            have,
+            medians,
+            color=colour,
+            marker=marker,
+            markersize=8,
+            linewidth=2,
+            markeredgecolor=SURFACE,
+            label=name,
+        )
+        ping_waits = [w for w in waits if ping.get((setting, w))]
+        axes.plot(
+            ping_waits,
+            [statistics.median(ping[(setting, w)]) for w in ping_waits],
+            color=colour,
+            linewidth=1,
+            linestyle="--",
+            alpha=0.6,
+        )
+        # A direct label at the line's end, in text colour.
+        axes.annotate(
+            setting,
+            xy=(have[-1], medians[-1]),
+            xytext=(8, 0),
+            textcoords="offset points",
+            va="center",
+            color=TEXT,
+            fontsize=9,
+        )
+    if ai:
+        ai_health = by_setting(ai, "health_p95_ms")
+        steps = [
+            float(r["server_step_median_s"])
+            for r in ai
+            if r["mode"] == "A" and r["server_step_median_s"]
+        ]
+        x = statistics.median(steps)
+        for setting, values in ai_health.items():
+            colour, marker, _ = E1_STYLE[f"{setting[0][0]}50"]
+            axes.scatter(
+                [x],
+                [statistics.median(values)],
+                s=120,
+                marker=marker,
+                facecolors="none",
+                edgecolors=colour,
+                linewidths=2,
+                zorder=4,
+            )
+        # B and C sit on top of each other, so they share one label, placed
+        # above the low lines; A gets its own.
+        modes = sorted(ai_health)
+        for group, y_offset in (
+            ([k for k in modes if k[0][0] == "A"], 0),
+            ([k for k in modes if k[0][0] != "A"], 26),
+        ):
+            if not group:
+                continue
+            top = max(statistics.median(ai_health[k]) for k in group)
+            axes.annotate(
+                "real AI, " + " and ".join(k[0][0] for k in group),
+                xy=(x, top),
+                xytext=(-12, y_offset),
+                textcoords="offset points",
+                ha="right",
+                va="center",
+                color=TEXT,
+                fontsize=8,
+                arrowprops={"arrowstyle": "-", "color": MUTED, "linewidth": 0.8}
+                if y_offset
+                else None,
+            )
+        # One legend entry for every hollow mark.
+        axes.scatter(
+            [],
+            [],
+            s=120,
+            marker="o",
+            facecolors="none",
+            edgecolors=MUTED,
+            linewidths=2,
+            label=f"real AI (10 requests), at {x:.1f} s per answer",
+        )
+    if after_fix:
+        # The confirmation run after /health became async def (D99): stars
+        # in the setting's colour at the wait it was run at.
+        fixed = by_setting(after_fix, "health_p95_ms")
+        for (setting, wait), values in sorted(fixed.items()):
+            colour = E1_STYLE[setting][0]
+            axes.scatter(
+                [wait],
+                [statistics.median(values)],
+                s=160,
+                marker="*",
+                color=colour,
+                edgecolors=TEXT,
+                linewidths=0.6,
+                zorder=5,
+            )
+        axes.annotate(
+            "B50 and B100 after\n/health became async def",
+            xy=(1.0, max(statistics.median(v) for v in fixed.values())),
+            xytext=(-40, 55),
+            textcoords="offset points",
+            ha="right",
+            color=TEXT,
+            fontsize=8,
+            arrowprops={"arrowstyle": "-", "color": MUTED, "linewidth": 0.8},
+        )
+        axes.scatter(
+            [],
+            [],
+            s=160,
+            marker="*",
+            color=MUTED,
+            edgecolors=TEXT,
+            linewidths=0.6,
+            label="after /health became async def (D99)",
+        )
+    axes.plot([], [], color=MUTED, linewidth=1, linestyle="--", label="async ping p95")
+    axes.set_xscale("log", base=2)
+    axes.set_yscale("log")
+    axes.set_xticks(waits, [f"{w:g} s" for w in waits])
+    style(
+        axes,
+        "/health p95 while 50 (or 100) slow requests run (line: median of 5 runs)",
+        "Wait of each slow request",
+        "/health p95, milliseconds (log scale)",
+    )
+    # The legend sits under the chart, so it covers no line.
+    axes.legend(
+        frameon=False,
+        labelcolor=TEXT,
+        loc="upper left",
+        bbox_to_anchor=(0, -0.12),
+        ncol=2,
+        fontsize=8,
+    )
+    save(figure, "e1_health_p95.png")
+
+
+def e1_finish_chart(slow: list[dict]) -> None:
+    """When each slow request finished, at one wait, per setting.
+
+    Requests sorted by finish time; for each place in that order, the median
+    over the 5 runs. "One after another" is a rising line, "waves" are
+    steps, "all at once" is flat.
+    """
+    figure, axes = plt.subplots(figsize=(9, 5.5))
+    for setting, (colour, marker, name) in E1_STYLE.items():
+        runs: dict[str, list[float]] = {}
+        for row in slow:
+            # Only requests that really got their answer: a failed one's
+            # time is when it failed, not when it finished.
+            if (
+                row["setting"] == setting
+                and float(row["wait_seconds"]) == E1_FINISH_WAIT
+                and row["ok"] == "True"
+            ):
+                runs.setdefault(row["repeat"], []).append(float(row["finished"]))
+        if not runs:
+            continue
+        ordered = [sorted(times) for times in runs.values()]
+        # For each place in the finishing order, the median over the runs
+        # that have that place (no run is cut short to match another).
+        medians = [
+            statistics.median([t for t in place if t is not None])
+            for place in zip_longest(*ordered)
+        ]
+        places = range(1, len(medians) + 1)
+        # A marker on every 10th request tells the lines apart without colour.
+        axes.plot(
+            places,
+            medians,
+            color=colour,
+            linewidth=2,
+            marker=marker,
+            markevery=10,
+            markersize=7,
+            markeredgecolor=SURFACE,
+            label=name,
+        )
+        # B50 ends right on the B100 line, so its label goes just below.
+        axes.annotate(
+            f"{setting}: last at {medians[-1]:.1f} s",
+            xy=(len(medians), medians[-1]),
+            xytext=(6, -12 if setting == "B50" else 0),
+            textcoords="offset points",
+            va="center",
+            color=TEXT,
+            fontsize=9,
+        )
+    axes.set_yscale("log")
+    style(
+        axes,
+        f"When each slow request finished (wait {E1_FINISH_WAIT:g} s, "
+        "median of 5 runs)",
+        "Slow requests, in the order they finished",
+        "Seconds after all were sent (log scale)",
+    )
+    axes.legend(frameon=False, labelcolor=TEXT, loc="lower right", fontsize=8)
+    axes.set_xlim(right=125)
+    save(figure, "e1_slow_finish.png")
+
+
+def e1_numbers(rows: list[dict]) -> None:
+    """Print the E1 key numbers: median (min-max) of the 5 runs (D97)."""
+    columns = [
+        ("health_p50_ms", "/health p50 ms"),
+        ("health_p95_ms", "/health p95 ms"),
+        ("ping_p95_ms", "ping p95 ms"),
+        ("slow_last_finish_s", "last slow done s"),
+        ("errors", "errors"),
+        ("max_probe_late_ms", "latest probe ms"),
+    ]
+    grouped = {column: by_setting(rows, column) for column, _ in columns}
+    keys = sorted(grouped["health_p95_ms"], key=lambda k: (k[1], k[0]))
+    for key in keys:
+        # A column can be empty for a setting (e.g. every ping failed).
+        parts = [
+            f"{title} {median_and_spread(grouped[c][key])}"
+            if grouped[c].get(key)
+            else f"{title} n/a"
+            for c, title in columns
+        ]
+        print(f"E1 {rows[0]['kind']} {key[0]:>5} wait {key[1]:g}: " + "; ".join(parts))
+
+
+def e1_charts() -> None:
+    """Draw the E1 charts and print its numbers, if E1 has been measured."""
+    if not (DATA / "e1_runs.csv").exists():
+        return
+    runs = read("e1_runs.csv")
+    sleep = [r for r in runs if r["kind"] == "sleep"]
+    ai = [r for r in runs if r["kind"] == "ai"]
+    after_fix = [r for r in runs if r["kind"] == "after_fix"]
+    if sleep:
+        e1_health_chart(sleep, ai, after_fix)
+        e1_finish_chart([r for r in read("e1_slow.csv") if r["kind"] == "sleep"])
+        e1_numbers(sleep)
+    if ai:
+        e1_numbers(ai)
+    if after_fix:
+        e1_numbers(after_fix)
+
+
 def main() -> None:
-    """Draw all three charts and print the key numbers."""
+    """Draw all the charts and print the key numbers."""
     alone_rows = read("ollama_times.csv")
     cool_rows = read("ollama_times_cool.csv")
     alone = [float(r["seconds"]) for r in alone_rows]
@@ -243,6 +553,7 @@ def main() -> None:
     for n, seconds in medians.items():
         print(f"{n} at once: median {seconds:.1f} s for all 100 texts")
     print("It", stops_getting_faster(medians) + ".")
+    e1_charts()
     print(f"Charts written to {CHARTS}.")
 
 

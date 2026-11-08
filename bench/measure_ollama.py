@@ -57,7 +57,7 @@ from pathlib import Path
 
 import httpx
 
-from app.ai import OllamaAI
+from app.ai import OllamaAI, make_ollama_ai
 from app.normalise import prepare_for_ai
 from app.settings import settings
 
@@ -175,14 +175,7 @@ TransportMaker = Callable[[], RecordingTransport]
 
 def make_client(transport: RecordingTransport) -> OllamaAI:
     """Kuyruk's own Ollama client, with the same settings the worker uses."""
-    return OllamaAI(
-        url=settings.ollama_url,
-        model=settings.ollama_model,
-        temperature=settings.ollama_temperature,
-        seed=settings.ollama_seed,
-        timeout_seconds=settings.ollama_timeout_seconds,
-        transport=transport,
-    )
+    return make_ollama_ai(transport)
 
 
 def load_reviews(path: Path = REVIEWS_FILE) -> list[Review]:

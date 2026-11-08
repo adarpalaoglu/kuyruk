@@ -75,19 +75,30 @@ class AIBackend(Protocol):
         ...
 
 
+def make_ollama_ai(transport: httpx.AsyncBaseTransport | None = None) -> "OllamaAI":
+    """Kuyruk's Ollama client, set up from the settings.
+
+    The one place that turns settings into an `OllamaAI`, used by the worker
+    (through `get_ai_backend`), the E1 experiment and the measuring scripts,
+    so they all talk to Ollama the same way. `transport`: see `OllamaAI`.
+    """
+    return OllamaAI(
+        url=settings.ollama_url,
+        model=settings.ollama_model,
+        temperature=settings.ollama_temperature,
+        seed=settings.ollama_seed,
+        timeout_seconds=settings.ollama_timeout_seconds,
+        transport=transport,
+    )
+
+
 def get_ai_backend() -> AIBackend:
     """Create the AI chosen by the AI_BACKEND setting, using its settings.
 
     The only place in Kuyruk that knows which backend is in use.
     """
     if settings.ai_backend == "ollama":
-        return OllamaAI(
-            url=settings.ollama_url,
-            model=settings.ollama_model,
-            temperature=settings.ollama_temperature,
-            seed=settings.ollama_seed,
-            timeout_seconds=settings.ollama_timeout_seconds,
-        )
+        return make_ollama_ai()
     return FakeAI(
         wait_mode=settings.fake_ai_wait_mode,
         wait_seconds=settings.fake_ai_wait_seconds,
@@ -212,14 +223,13 @@ class OllamaAI:
         self.timeout_seconds = timeout_seconds
         self.transport = transport
 
-    async def summarise(self, text: str) -> str:
-        """Ask Ollama for the summary, labelling every failure temporary or permanent.
+    def chat_request(self, text: str) -> dict:
+        """The exact request Kuyruk sends to Ollama for one text.
 
-        Temporary: too slow (timeout), can't connect (Ollama off), a reply that
-        breaks off halfway, a 5xx reply (Ollama's own fault or busy) or 429
-        ("too many requests"). Everything else is permanent (D47).
+        Kept in one place so the E1 experiment's blocking client
+        (`app/experiments.py`) sends exactly the same request as Kuyruk.
         """
-        request = {
+        return {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": INSTRUCTION},
@@ -234,6 +244,15 @@ class OllamaAI:
             # so the same text almost always gives the same summary (D46).
             "options": {"temperature": self.temperature, "seed": self.seed},
         }
+
+    async def summarise(self, text: str) -> str:
+        """Ask Ollama for the summary, labelling every failure temporary or permanent.
+
+        Temporary: too slow (timeout), can't connect (Ollama off), a reply that
+        breaks off halfway, a 5xx reply (Ollama's own fault or busy) or 429
+        ("too many requests"). Everything else is permanent (D47).
+        """
+        request = self.chat_request(text)
         try:
             async with httpx.AsyncClient(
                 base_url=self.url,
@@ -254,6 +273,14 @@ class OllamaAI:
         except httpx.HTTPError as error:
             raise PermanentAIError(f"Talking to the AI failed: {error}") from error
 
+        return self.answer_from(response)
+
+    def answer_from(self, response: httpx.Response) -> str:
+        """Read the summary from Ollama's reply, or raise a labelled error.
+
+        Kept in one place so the E1 experiment's blocking client
+        (`app/experiments.py`) judges Ollama's reply exactly like Kuyruk.
+        """
         # 5xx: a problem on Ollama's side, or busy. 429: "too many requests".
         if response.status_code >= 500 or response.status_code == 429:
             raise TemporaryAIError(

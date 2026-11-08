@@ -60,3 +60,70 @@ by the script), only the shared instruction remembered (11% of input tokens).
   Air holds back its chip as it heats up, for about 5–6 minutes of steady
   work. All reported numbers except `ollama_times_cool.csv` come from a fully
   warm Mac, like a long real job.
+
+## E1 — blocking the event loop (Slice 11)
+
+Written automatically by `bench/e1_load.py` when the run started.
+
+| | |
+|---|---|
+| Date and time | 2026-11-08T19:19:28+03:00 |
+| Mac | MacBook Air (Mac16,12), Apple M4, 24 GB |
+| macOS | 15.7.3 |
+| Power | Now drawing from 'AC Power' |
+| Python, FastAPI, uvicorn, httpx | 3.12.16, 0.162.0, 0.54.0, 0.28.1 |
+| Kuyruk commit | `d809ba510bfd01cc23c64b1861489ab5d52723a0` plus uncommitted Slice 11 work |
+| Server | one uvicorn process: `-m uvicorn app.main:app --host 127.0.0.1 --port 8011 --workers 1 --loop asyncio --http h11 --backlog 4096 --timeout-keep-alive 60 --no-access-log` |
+| Server connection queue (backlog) | 4096; macOS cap `kern.ipc.somaxconn` = 4096 |
+| Open-files limit | 10240 (hard: unlimited), for the load test and the server (inherited) |
+| Client connection limit | none (`max_connections=None`) |
+| Timeouts (probes and slow requests) | 900 s |
+| Probes | /health and ping every 100 ms on a fixed clock; warning if one leaves > 20 ms late |
+| Probe process | its own process and client, started fresh each run |
+| Rest between runs | 2 s; new clients every run |
+| Warm-up | 3 rounds of 5 slow requests per mode (0.05 s) and 20 of each probe, not recorded |
+| Other apps | Docker Desktop closed; other heavy apps closed |
+| Ollama version, model | 0.40.15, gemma4:e4b (digest `eb2177adf7646d15faead94fdad6d3e170dc8015653418a3b7d5d52a6380be5b`) |
+| Ollama parallel setting | 8 (D88) |
+| AI part | heat-up 600 s (D94); memory emptied and 3 warm-ups before every run (D89); 10 texts per run |
+
+### E1 run notes (added by hand after the run)
+
+- One full run, 19:19–20:24 on 8 Nov 2026: 80 sleep runs, then a 600 s
+  heat-up (611 texts, not recorded) and 15 real-AI runs. 0 errors in all
+  95 runs (46,532 probes, 5,150 slow requests).
+- Clock check: 255 of the 46,532 probes (0.5%) left more than 20 ms late.
+  252 of them were pings in mode A runs (251 at 4 s, 1 at 2 s), 20–26 ms
+  late, late in the run when thousands of probes were open at once in the
+  probe process; each of them then waited at least 60 s for its answer, so
+  26 ms changes nothing. In B100: one ping 20.7 ms late (2 s, repeat 3), and
+  one tick at 4 s (repeat 5, 8.1 s into the run) 62–63 ms late for both
+  probes. Every other probe left within 20 ms.
+- Before the full run, two trial runs (not kept) changed the load test:
+  probes moved to their own process (one probe left 82 ms late at a burst
+  of slow replies when everything ran in one process), and the probe
+  process sends one unrecorded probe of each kind first (the first real
+  probe was ~22 ms late without it). D96.
+
+## E1 confirmation after /health became async def (Slice 11)
+
+Written automatically by `bench/e1_load.py` when the run started.
+
+| | |
+|---|---|
+| Date and time | 2026-11-08T20:38:50+03:00 |
+| Mac | MacBook Air (Mac16,12), Apple M4, 24 GB |
+| macOS | 15.7.3 |
+| Power | Now drawing from 'AC Power' |
+| Python, FastAPI, uvicorn, httpx | 3.12.16, 0.162.0, 0.54.0, 0.28.1 |
+| Kuyruk commit | `d809ba510bfd01cc23c64b1861489ab5d52723a0` plus uncommitted Slice 11 work |
+| Server | one uvicorn process: `-m uvicorn app.main:app --host 127.0.0.1 --port 8011 --workers 1 --loop asyncio --http h11 --backlog 4096 --timeout-keep-alive 60 --no-access-log` |
+| Server connection queue (backlog) | 4096; macOS cap `kern.ipc.somaxconn` = 4096 |
+| Open-files limit | 10240 (hard: unlimited), for the load test and the server (inherited) |
+| Client connection limit | none (`max_connections=None`) |
+| Timeouts (probes and slow requests) | 900 s |
+| Probes | /health and ping every 100 ms on a fixed clock; warning if one leaves > 20 ms late |
+| Probe process | its own process and client, started fresh each run |
+| Rest between runs | 2 s; new clients every run |
+| Warm-up | 3 rounds of 5 slow requests per mode (0.05 s) and 20 of each probe, not recorded |
+| Other apps | Docker Desktop closed; other heavy apps closed |
