@@ -126,11 +126,14 @@ class Settings(BaseSettings):
 
     # The fake AI (spec 2.4). It waits, then returns a fixed answer.
     # Wait mode "fixed" always waits fake_ai_wait_seconds; "replay" picks each
-    # wait from real measured times in fake_ai_replay_file (made in Slice 10),
-    # using fake_ai_seed so the same seed always gives the same waits.
+    # wait from real measured times in fake_ai_replay_file, using fake_ai_seed
+    # so the same seed always gives the same waits. The default file holds the
+    # real AI's per-text times measured at 4 texts at once, the worker's
+    # texts_at_once default, so the fake behaves like the real AI under real
+    # load (Slice 10, D93).
     fake_ai_wait_mode: Literal["fixed", "replay"] = "fixed"
     fake_ai_wait_seconds: float = Field(default=1.0, ge=0)
-    fake_ai_replay_file: str = "bench/data/ollama_times.csv"
+    fake_ai_replay_file: str = "bench/data/ollama_times_at_4.csv"
     fake_ai_seed: int = 42
     fake_ai_answer: str = "Bu metin kısaca özetlenmiştir."
     # Failing on purpose: 0 = never, 1 = every call, N = every Nth call. A retry

@@ -164,7 +164,7 @@ def read_replay_times(path: str) -> list[float]:
     """Read the measured AI times (in seconds) from a CSV file.
 
     A CSV is a plain table file with values separated by commas. This one needs
-    a column named `seconds`; Slice 10 writes `bench/data/ollama_times.csv` in
+    a column named `seconds`; Slice 10 wrote `bench/data/ollama_times_at_4.csv` in
     that format. Raises AISetupError if the file is missing, empty or wrong.
     """
     try:

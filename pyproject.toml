@@ -28,6 +28,11 @@ dev = [
     "pytest-cov==7.1.0",
     "ruff==0.17.4",
 ]
+# Needed only to draw the experiment charts (bench/charts.py). Not installed by
+# `uv sync`, CI or the Docker image; use `uv run --group bench ...`.
+bench = [
+    "matplotlib==3.11.2",
+]
 
 [tool.ruff]
 line-length = 88

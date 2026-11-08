@@ -43,11 +43,11 @@ x-kuyruk-app: &kuyruk-app
     # "db" is the database container's name on Docker's private network.
     # Always built here; a DATABASE_URL in .env (for the Mac) doesn't apply.
     DATABASE_URL: postgresql+psycopg://kuyruk:${POSTGRES_PASSWORD:-demo-only-db-password}@db:5432/kuyruk
-    # The fake AI, replaying realistic waiting times. Until Slice 10 measures
-    # the real AI, the times come from a labelled placeholder (D82).
+    # The fake AI, replaying the real AI's waiting times: Gemma's per-text
+    # times measured at 4 texts at once, the worker's setting (Slice 10, D93).
     AI_BACKEND: ${AI_BACKEND:-fake}
     FAKE_AI_WAIT_MODE: ${FAKE_AI_WAIT_MODE:-replay}
-    FAKE_AI_REPLAY_FILE: ${FAKE_AI_REPLAY_FILE:-bench/data/placeholder_times.csv}
+    FAKE_AI_REPLAY_FILE: ${FAKE_AI_REPLAY_FILE:-bench/data/ollama_times_at_4.csv}
     # Demo timings (D81): a heartbeat every second and "stuck" after 5 seconds
     # without one, so a crash is recovered within seconds on screen. Real use
     # sets 5 and 30 in .env (the defaults in app/settings.py).

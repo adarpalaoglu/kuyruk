@@ -433,7 +433,7 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 - **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
 
 ### D82 — Placeholder waiting times until Slice 10
-- **Decision:** until Slice 10 measures the real AI, the demo's fake AI replays `bench/data/placeholder_times.csv`: ten rough values between 0.5 and 1.1 seconds, the range seen once in the Slice 4 check. The file name and `bench/data/README.md` say it is not a measurement. Slice 10 replaces it with `ollama_times.csv` and deletes it.
+- **Decision:** until Slice 10 measures the real AI, the demo's fake AI replays `bench/data/placeholder_times.csv`: ten rough values between 0.5 and 1.1 seconds, the range seen once in the Slice 4 check. The file name and `bench/data/README.md` say it is not a measurement. Slice 10 replaces it with `ollama_times.csv` and deletes it. *(Done in Slice 10, 8 Nov 2026: replaced by `ollama_times_at_4.csv`, the times at 4 at once, D93.)*
 - **Why:** Replay mode needs a file to start at all, and the demo should feel like the real AI. Naming it "placeholder" means it can never be mistaken for measured data.
 - **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
 
@@ -457,6 +457,50 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 - **Decision:** `scripts/clean_machine_check.py` copies the project's files (git's list, so no `.env`) into a temporary folder and runs everything under the Docker project name `kuyruk-check`. Images have no fixed name, so each project's images are its own. It removes that project's containers, volume and the images it built (not the shared Postgres image), builds with no cache, starts with `docker compose up`, uses Kuyruk like a visitor (sign up, log in, job, live progress, demo crash, recovery) and prints pass/fail per step, then removes everything again.
 - **Why:** My own `.env` and database would hide exactly the problems a first-time visitor would meet. A copy without `.env` behaves like a fresh download, and a separate project name means the check never touches my local data.
 - **Date:** 7 Nov 2026 · **Status:** Approved (7 Nov 2026)
+
+---
+
+## Measuring the real AI (Slice 10)
+
+### D87 — The 100 test texts are synthetic reviews written by an AI
+- **Decision:** `bench/data/reviews_tr.csv` holds 100 made-up Turkish product reviews written by Claude (an AI), and says so in `bench/data/README.md`. 34 short (up to 200 characters), 33 medium (201–800), 33 long (801–2,000). Some typed without Turkish letters, some with emoji; 12 contain made-up emails (`@example.com`) or phone numbers (`555 000 …`). No real people or brands.
+- **Why:** Real customer reviews would bring personal data and copyright questions. Synthetic ones, clearly labelled, are safe to publish, and I checked a random 20 sound natural. The length spread covers everything Kuyruk accepts, and the emails and phones exercise the hiding step on the measured path.
+- **Date:** 8 Nov 2026 · **Status:** Approved (8 Nov 2026)
+
+### D88 — Ollama's parallel setting is 8; with this model it has no effect
+- **Decision:** all Slice 10 measurements run with Ollama's parallel setting at 8 (`OLLAMA_NUM_PARALLEL=8`), also the one-at-a-time run, so every number comes from one server setup. **Finding:** Ollama 0.40.15 runs this model with its MLX engine, which ignores that setting and answers one request at a time (8 short texts: 3.0 s one after another, 2.9 s sent together; Ollama issue #17280 describes the same, still open). I keep the model (D08) and measure this setup as it is.
+- **Why:** Changing the model to get parallel answers would break the pinned version and the Slice 4 check. The finding is useful in itself: sending several texts at once doesn't help if the AI server handles them one by one. Kuyruk's worker still sends 4 at once, which costs nothing and pays off on a server that does answer in parallel.
+- **Date:** 8 Nov 2026 · **Status:** Approved (8 Nov 2026)
+
+### D89 — A fresh start before every run: memory emptied, three warm-ups never recorded
+- **Decision:** every measured run (the one-at-a-time run and each of the 12 "at once" runs) starts by unloading the model from Ollama, which empties its memory of earlier texts, then sends 3 requests using 3 extra texts that are not among the 100; their times are not recorded.
+- **Why:** Loading the model takes about 5 s, a one-off cost and not a text's real time, so the warm-up pays it. Ollama's engine also remembers texts it has already read (a "prefix cache") and answers a repeat faster, because it skips reading it again. Real jobs bring new texts, so each run must start with an empty memory. *(Updated 8 Nov 2026: the first attempt assumed Ollama remembers only the last text and emptied nothing; the 12 "at once" runs then found 99% of each text already remembered and ran about 25% too fast. They were redone.)*
+- **Date:** 8 Nov 2026, updated 8 Nov 2026 · **Status:** Approved (8 Nov 2026; update approved 8 Nov 2026)
+
+### D90 — What "seconds" means
+- **Decision:** a text's time is the clock time around Kuyruk's own Ollama client call (`OllamaAI`), after `prepare_for_ai`: exactly what a worker waits. Token counts come from Ollama's reply; the measuring script reads them by listening in on the reply, without changing Kuyruk's code.
+- **Why:** The fake AI replays these times in place of the real call, so they must measure the same thing the worker waits for, including the trip to Ollama and back.
+- **Date:** 8 Nov 2026 · **Status:** Approved (8 Nov 2026)
+
+### D91 — Shuffled texts, interleaved runs
+- **Decision:** the 100 texts are sent in a shuffled order (fixed seed). The 12 runs of "texts at once" are interleaved: round 1 = 1, 2, 4, 8; round 2 = 8, 4, 2, 1; round 3 = 2, 8, 1, 4. Each run starts with Ollama's memory emptied (D89). Each run's start time is recorded.
+- **Why:** A fanless MacBook Air gets warmer and slower over a long run, and background tasks come and go. Mixing the order spreads that drift over every setting and every text length, so it can't pass for an effect of one of them.
+- **Date:** 8 Nov 2026 · **Status:** Approved (8 Nov 2026)
+
+### D92 — The model is pinned by its digest
+- **Decision:** settings keep the model name `gemma4:e4b` (Ollama looks models up by name). The exact digest (`eb2177adf764…`, a fingerprint of the model's files) is in `bench/data/setup.md`, and the measuring script refuses to run if the installed model's digest is different.
+- **Why:** A name can later point at an updated model; the digest can't. All numbers then provably come from one model.
+- **Date:** 8 Nov 2026 · **Status:** Approved (8 Nov 2026)
+
+### D93 — "Stops getting faster", and which times the fake AI replays
+- **Decision:** "stops getting faster" is the first step where doubling the texts at once cuts the median total time by less than 10%. The fake AI's default replay file is the per-text times measured at 4 at once (`bench/data/ollama_times_at_4.csv`, the worker's `TEXTS_AT_ONCE`), so the demo, E1 and E2 behave like the real AI under real load. The one-at-a-time times (`bench/data/ollama_times.csv`) are kept for the charts and comparison. If `TEXTS_AT_ONCE` is changed, the replayed times no longer match that load exactly.
+- **Why:** A worker sending 4 texts at once waits for each text as long as it takes at 4 at once (on this setup, including the wait in Ollama's queue), not as long as a text alone. Replaying those times keeps the fake honest about real use.
+- **Date:** 8 Nov 2026 · **Status:** Approved (8 Nov 2026)
+
+### D94 — Measure on a warm Mac: a 10-minute heat-up first
+- **Decision:** every measurement starts by keeping the AI busy for 10 minutes (texts sent, nothing recorded). The one-at-a-time run was redone this way; the first one, on a cool Mac, is kept as `bench/data/ollama_times_cool.csv` as evidence only.
+- **Why:** My fanless MacBook Air slows down by about a third as it heats up: the same 100 texts took 132 s cool, 158 s after 3 minutes of work and 179 s after 10. A long real job runs on a warm Mac, so all numbers must come from one condition, the warm one. 3 minutes was tried and was not enough; the Mac kept slowing for about 5–6 minutes.
+- **Date:** 8 Nov 2026 · **Status:** Approved (8 Nov 2026)
 
 ---
 
