@@ -186,6 +186,16 @@ def test_base_images_reads_every_from_line():
     assert base_images(text) == ["uv:1@sha256:x", "slim:2"]
 
 
+def test_by_digest_keeps_only_the_fingerprint():
+    by_digest = e3_build.by_digest
+    assert by_digest("python:3.12.16-trixie@sha256:ab") == "python@sha256:ab"
+    assert by_digest("ghcr.io/astral-sh/uv:0.13.7@sha256:cd") == (
+        "ghcr.io/astral-sh/uv@sha256:cd"
+    )
+    assert by_digest("host:5000/x:1@sha256:ef") == "host:5000/x@sha256:ef"
+    assert by_digest("python:3.12") == "python:3.12"
+
+
 def test_count_lines_skips_comments_and_blank_lines():
     text = "# a comment\n\nFROM x\n  # indented comment\nRUN a \\\n    && b\n"
     assert count_lines(text) == 3
@@ -369,7 +379,7 @@ def test_a_build_that_takes_too_long_is_a_failure():
 def test_one_round_clears_the_cache_then_cold_code_package(tmp_path):
     folder = code_folder(tmp_path)
     context = FakeContext(folder)
-    runner = FakeRunner(answers={"docker image inspect": "123456\n"})
+    runner = FakeRunner(answers={"docker history": "123000\n456\n"})
     rows = measure_round("pip-good", 2, 3, context, "mac", runner, ticking_clock(5))
     assert [r["step"] for r in rows] == ["cold", "code", "package"]
     assert all(r["ok"] == "yes" and r["seconds"] == "5.00" for r in rows)
@@ -441,10 +451,20 @@ def test_has_curl():
     assert e3_build.has_curl("img", FakeRunner(fail=["docker run"])) == "no"
 
 
-def test_image_bytes_is_blank_when_unknown():
-    runner = FakeRunner(answers={"docker image inspect": "42\n"})
+def test_image_bytes_is_the_sum_of_the_layers():
+    # docker history lists one size per layer, empty layers as 0 (D106).
+    runner = FakeRunner(answers={"docker history": "0\n40\n0\n2\n"})
     assert e3_build.image_bytes("img", runner) == "42"
+    command = runner.commands[0][0]
+    assert "--human=false" in command and command[-1] == "img"
+
+
+def test_image_bytes_is_blank_when_unknown():
     assert e3_build.image_bytes("img", FakeRunner(fail=["docker"])) == ""
+    # No layers listed, or a size that isn't a plain number.
+    assert e3_build.image_bytes("img", FakeRunner()) == ""
+    weird = FakeRunner(answers={"docker history": "12\n3.4MB\n"})
+    assert e3_build.image_bytes("img", weird) == ""
 
 
 def test_gzipped_size_counts_the_packed_output():
@@ -461,7 +481,7 @@ def test_gzipped_size_counts_the_packed_output():
 
 def test_measure_images_covers_every_dockerfile_and_both_bases():
     rows = []
-    runner = FakeRunner(answers={"docker image inspect": "1000\n"})
+    runner = FakeRunner(answers={"docker history": "1000\n"})
     measure_images(
         FakeContext(Path("/c")),
         "mac",

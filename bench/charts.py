@@ -888,7 +888,7 @@ def e3_size_chart(environments: list[tuple[str, list[dict]]]) -> None:
         axes.invert_yaxis()  # the simple version on top
         axes.set_xlim(0, max(sizes.values(), default=1) * 1.25)
         axes.legend(frameon=False, loc="lower right")
-        style(axes, name, "Size on disk (MB, uncompressed)", "")
+        style(axes, name, "Size uncompressed (MB, sum of the layers)", "")
     figure.suptitle("Image size per Dockerfile", x=0.01, ha="left", color=TEXT)
     save(figure, "e3_image_size.png")
 

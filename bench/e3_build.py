@@ -4,7 +4,7 @@ Design approved by Adar on 9 Nov 2026 (D105-D107). It builds the E3
 Dockerfiles in `docker/` (recipes Docker follows to make an *image*, the
 sealed box holding Python, the libraries and Kuyruk's code) and measures:
 
-1. **Images** (once per Dockerfile): the size on disk (uncompressed), the
+1. **Images** (once per Dockerfile): the size uncompressed (its layers), the
    size compressed (the layers gzipped, roughly what a download costs),
    whether the image actually starts and answers /health, whether `curl` is
    inside, and the Dockerfile's lines without comments or blank lines. Also
@@ -154,6 +154,22 @@ def base_images(dockerfile_text: str) -> list[str]:
         if len(words) >= 2 and words[0].upper() == "FROM":
             images.append(words[1])
     return images
+
+
+def by_digest(image: str) -> str:
+    """An image name with only its fingerprint, e.g. `python@sha256:...`.
+
+    The Dockerfiles name base images as name:version@fingerprint. Docker
+    stores them under the fingerprint, and `docker history` finds them only
+    by name@fingerprint, without the version.
+    """
+    if "@" not in image:
+        return image
+    name, digest = image.split("@", 1)
+    # Drop a ":version" after the last "/", not a registry's ":port".
+    folder, _, last = name.rpartition("/")
+    last = last.split(":", 1)[0]
+    return f"{folder}/{last}@{digest}" if folder else f"{last}@{digest}"
 
 
 def count_lines(dockerfile_text: str) -> int:
@@ -341,9 +357,30 @@ def build(
 
 
 def image_bytes(image: str, runner: Runner = run) -> str:
-    """An image's size on disk (uncompressed), in bytes; blank if unknown."""
-    result = runner(["docker", "image", "inspect", "--format", "{{.Size}}", image])
-    return result.stdout.strip() if result.returncode == 0 else ""
+    """An image's uncompressed size: the sum of its layers, in bytes (D106).
+
+    Each *layer* is one saved step of the image (the base image's layers
+    included); `docker history` lists every layer's unpacked size. Docker's
+    own image size can't be used: Docker Desktop's (with its "containerd"
+    image store) also adds the compressed copy of each layer it keeps, so it
+    counts every layer twice, while a standard Docker install doesn't. The
+    layer sum means the same on every machine. Blank if unknown.
+    """
+    result = runner(
+        [
+            "docker",
+            "history",
+            "--no-trunc",
+            "--human=false",
+            "--format",
+            "{{.Size}}",
+            image,
+        ]
+    )
+    sizes = result.stdout.split()
+    if result.returncode != 0 or not sizes or not all(s.isdigit() for s in sizes):
+        return ""
+    return str(sum(int(s) for s in sizes))
 
 
 def compressed_bytes(image: str, runner: Runner = run) -> str:
@@ -476,7 +513,7 @@ def measure_images(
         write(row)
     for base, name in BASES.items():
         # The base image is the last FROM line of that Dockerfile.
-        image = base_images(dockerfile(name).read_text())[-1]
+        image = by_digest(base_images(dockerfile(name).read_text())[-1])
         print(f"Image {base}: measuring ...", flush=True)
         write(
             {

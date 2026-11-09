@@ -80,7 +80,8 @@ times in seconds.
 
 - `e3_images.csv` / `e3_images_ci.csv` — one row per image (5 Dockerfiles
   and the 2 base images on their own, `base-full` and `base-slim`):
-  `image_bytes` (size on disk, uncompressed), `compressed_bytes` (the image
+  `image_bytes` (uncompressed: the sum of the image's layers in
+  `docker history`, D106), `compressed_bytes` (the image
   saved with `docker save` and gzipped), `starts` (the image started Kuyruk's
   API and `/health` answered), `has_curl`, `lines` (the Dockerfile's lines
   without comments or blank lines; empty for base images).
