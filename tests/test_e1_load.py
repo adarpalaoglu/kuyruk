@@ -69,19 +69,55 @@ async def run_frozen(release_after: float, count: int = 3, broken: str = "") -> 
         return await run_once(client, slow_get, count)
 
 
+def frozen_until_probes(count: int) -> httpx.MockTransport:
+    """A pretend server that answers nothing until it has received `count` probes.
+
+    The freeze ends on what the server has *received*, not after a set time,
+    so the test below doesn't depend on how busy the computer is: if the
+    probes waited for answers, the probes it needs would never arrive.
+    """
+    release = asyncio.Event()
+    received = 0
+
+    async def handle(request: httpx.Request) -> httpx.Response:
+        """Count the probes; hold every request until enough have arrived."""
+        nonlocal received
+        if request.url.path in PROBES.values():
+            received += 1
+            if received >= count:
+                release.set()
+        await release.wait()
+        return httpx.Response(200, json={"waited_seconds": 0.5})
+
+    return httpx.MockTransport(handle)
+
+
 async def test_probes_leave_on_the_clock_while_nothing_answers():
-    """Probes leave every 100 ms although no earlier request has answered."""
-    run = await run_frozen(release_after=0.55)
+    """Probes keep leaving every 100 ms although no earlier request has answered.
+
+    The server stays frozen until the probes of 6 ticks (0, 0.1 ... 0.5 s)
+    have all arrived. So the run can only finish if the probes left on their
+    own clock without waiting for answers. The timeout turns a load test that
+    waits for answers into a clear failure instead of a hang. (How late each
+    probe leaves depends on how busy the computer is; that is checked in the
+    real runs and recorded in `bench/data/setup.md`, not here.)
+    """
+    ticks = 6
+    transport = frozen_until_probes(count=ticks * len(PROBES))
+    async with asyncio.timeout(10):
+        async with make_client("http://e1", transport) as client:
+            run = await run_once(client, slow_get, 3)
     for target in PROBES:
         planned = [p.planned for p in run.probes if p.target == target]
-        # Ticks at 0, 0.1, ... 0.5 all left while the server was frozen.
-        assert planned[:6] == pytest.approx([0.0, 0.1, 0.2, 0.3, 0.4, 0.5])
-    # Every probe left on time: no more than 20 ms after it was planned.
-    assert summarise(run)["max_probe_late_ms"] < e1_load.LATE_WARNING_MS
-    # The first probe waited for the whole freeze: its full time is measured.
+        assert planned[:ticks] == pytest.approx([0.0, 0.1, 0.2, 0.3, 0.4, 0.5])
+    # The first answer came only after the last frozen tick's probes had left:
+    # all of them were sent while nothing had answered.
     first = run.probes[0]
     assert first.ok
-    assert first.seconds == pytest.approx(0.55, abs=0.05)
+    first_answer = first.sent + first.seconds
+    frozen = [p for p in run.probes if p.planned < ticks * e1_load.PROBE_EVERY - 0.05]
+    assert len(frozen) == ticks * len(PROBES)
+    assert all(p.sent <= first_answer for p in frozen)
 
 
 async def test_probing_stops_after_the_last_slow_request_answers():
