@@ -157,7 +157,15 @@ its median, apart from C's few-millisecond values.
 ## E2 — Losing work
 
 ### Question
+A job is killed halfway. Broken: the job runs with FastAPI `BackgroundTasks`
+inside the API, and the API is killed. Fixed: the job runs in Kuyruk's
+separate worker with crash recovery, and the worker is killed. How many texts
+are lost, how many are done twice, how long until work continues, does the job
+ever finish, and what does the fix cost?
+
 ### Prediction
+E2 prediction (Adar, 8 Nov 2026, before running): Broken (BackgroundTasks inside the API): When the API is killed halfway through a job, the job stays "running" forever, even after the API restarts, because nothing remembers that it was in progress. Every text not finished at the kill is lost (about half the job), and the user waits forever. Fixed (separate worker + recovery): When the worker is killed halfway, no text is lost. Another worker (or the restarted one) notices the job is stuck once the heartbeat has been silent for the stale time, and continues from the first waiting text. Up to 4 texts are done twice: the ones that were with the AI at the moment of the kill. Recovery takes about the stale time (30 s) plus a second or two. Cost of the fix: a separate program and some extra database writes (a heartbeat every 5 s), which is small compared with losing work.
+
 ### Method
 ### Results
 ### Why it happens
