@@ -428,8 +428,8 @@ Cost of the fix. The Dockerfile will be about 3 times longer and harder to read 
   `docs/charts/e3_*.png`.
 
 ### Results
-All 60 builds on the Mac worked, and all 5 images started and answered
-`/health`. Sizes were the same in every round; build times within a few
+All 60 builds worked on each machine (120 in all), and all 5 images
+started and answered `/health` on both. Sizes were the same in every round; build times within a few
 tenths of a second (spread in brackets).
 
 **Image size** (Mac; MB)
@@ -474,22 +474,45 @@ faster) and 2.3 s with uv (6× faster). The bad-order rebuild took as long
 as adding a package: it reinstalled every library. uv was 3.6× faster
 than pip on a cold build and 5× faster on a reinstall.
 
-**GitHub Actions:** *[to be added after the run]*
+**GitHub Actions** (`ubuntu-24.04`, x86, 4 CPUs; run 42630112801)
+
+| Image | Uncompressed (MB) | Compressed (MB) | curl inside |
+|---|---|---|---|
+| pip-bad / pip-good | 1,220 | 453 | yes |
+| pip-slim | 230 | 92 | no |
+| uv-bad / uv-good | 207 | 69 | no |
+| *full base alone* | *1,110* | *405* | *yes* |
+| *slim base alone* | *119* | *43* | *no* |
+
+pip-bad is **5.9×** the size of uv-good (6.5× compressed). Of the 1,013 MB
+gap pip-good → uv-good, 990 MB (**98%**) is the base image alone and 23 MB
+(2%) is uv + two stages, the same split as on the Mac.
+
+| Dockerfile | Cold build | After a one-line code change | After adding one package |
+|---|---|---|---|
+| pip-bad | 9.7 (9.3–12.7) | 9.2 (8.8–10.0) | 9.6 (9.1–11.4) |
+| pip-good | 10.2 (9.8–11.6) | 1.4 (1.3–1.6) | 9.9 (9.2–10.4) |
+| uv-bad | 4.4 (4.1–4.7) | 3.5 (3.0–3.8) | 3.8 (3.3–3.9) |
+| uv-good | 4.3 (4.2–4.7) | 0.9 (0.7–1.0) | 3.3 (3.0–4.0) |
+
+Same order as on the Mac. pip was about twice as fast here (GitHub's
+network is fast), so the gaps are smaller: good layer order made a code
+change 6.6× faster with pip and 3.9× with uv.
 
 **My prediction, part by part:**
 
 | Prediction | Result | Verdict |
 |---|---|---|
-| Simple image (full base, one stage) around 1–1.2 GB | 1,331 MB | Partly wrong: 11% above the top of the range |
-| … mostly because the full base ships compilers and tools Kuyruk never uses | the full base is 1,204 of the 1,331 MB (90%); it has gcc, make, git, curl | Right |
-| Optimised image (slim, multi-stage) around 200–300 MB | 259 MB | Right |
-| Roughly 4–5 times smaller | 5.1× (6.3× compressed) | Right (just above) |
-| (Adar's question: how much is the base image alone?) | 98% of the gap pip-good → uv-good; uv + two stages 2%; layer order 0% | — |
-| One-line change, simple: 30–60 s, because the install is redone | 15.6 s; the install was redone (as long as adding a package) | Reason right, time wrong (half the lower bound) |
-| One-line change, optimised: under 5 s, install layer stays cached | 0.5 s | Right |
+| Simple image (full base, one stage) around 1–1.2 GB | Mac 1,331 MB; GitHub 1,220 MB | Partly wrong: above the range on both (11% and 2%) |
+| … mostly because the full base ships compilers and tools Kuyruk never uses | the full base is 90–91% of the simple image (Mac 1,204 of 1,331 MB); it has gcc, make, git, curl | Right |
+| Optimised image (slim, multi-stage) around 200–300 MB | Mac 259 MB; GitHub 207 MB | Right |
+| Roughly 4–5 times smaller | Mac 5.1×, GitHub 5.9× (compressed 6.3× and 6.5×) | Mostly right (somewhat above) |
+| (Adar's question: how much is the base image alone?) | 98% of the gap pip-good → uv-good on both; uv + two stages 2%; layer order 0% | — |
+| One-line change, simple: 30–60 s, because the install is redone | Mac 15.6 s, GitHub 9.2 s; the install was redone (as long as adding a package) | Reason right, time wrong (well below the range) |
+| One-line change, optimised: under 5 s, install layer stays cached | Mac 0.5 s, GitHub 0.9 s | Right |
 | Adding a package: both reinstall | both reinstalled | Right |
-| … simple 30–60 s, optimised 15–30 s | 14.9 s and 3.0 s | Wrong: both much faster, uv most of all |
-| … the gap much smaller | 5× (14.9 vs 3.0 s) instead of 31× for a code change; in seconds about the same (12 s vs 15 s) | Partly right |
+| … simple 30–60 s, optimised 15–30 s | Mac 14.9 s and 3.0 s; GitHub 9.6 s and 3.3 s | Wrong: both much faster, uv most of all |
+| … the gap much smaller | as a ratio yes: Mac 5× instead of 31× for a code change, GitHub 2.9× instead of 6.6×; in seconds about the same (Mac 12 s vs 15 s) | Partly right |
 | Cost: Dockerfile about 3 times longer | 23 lines vs 11 (2.1×) | Partly right |
 | Risk: forgetting to copy something builds fine but breaks only when run | not seen: all images started; not tested by leaving a line out | Not tested |
 | The slim image lacks curl | no curl in any slim image; curl in the full ones | Right |
@@ -513,6 +536,10 @@ than pip on a cold build and 5× faster on a reinstall.
   image inspect`) on the Mac includes each layer unpacked plus its
   compressed copy (uv-good: 259 + 71 = 331 MB). A first full run used that
   figure; it was repeated with the sum of the layers (D106 update).
+- **The same Dockerfile gives a smaller image on GitHub.** GitHub's
+  machine is x86, the Mac is ARM; the base images differ by platform (full
+  1,110 vs 1,204 MB, slim 119 vs 159 MB). The compressed sizes are almost
+  equal, and the split (98% base image) is the same.
 - **Layer order changes no size at all.** Bad and good order gave images
   within a few kilobytes of each other: order only decides what Docker can
   reuse.

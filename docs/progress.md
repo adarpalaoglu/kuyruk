@@ -3,7 +3,7 @@
 Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12 lists the slices).
 
 ## Current slice
-**Slice 13 — E3** (not started). Slice 12 done.
+**Slice 14 — E4** (not started). Slice 13 done.
 
 ## Slices
 
@@ -22,7 +22,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 | 10 | Measure the real AI | ☑ | 491 tests (6 on Postgres), 99.7% coverage (fast suite); 100 synthetic reviews measured on real Gemma, warm Mac: 1.78 s median per text alone; 1/2/4/8 at once all ≈ 182 s for 100 texts (no speed-up) |
 | 11 | E1 | ☑ | Prediction written? ☑ (pushed first, d809ba5). 554 tests (6 on Postgres skipped locally), 99.7% coverage; 95 runs + 10 after-fix runs, 0 errors; /health p95 at 1 s wait: A 61.7 s, B50 0.87 s → 5.6 ms and B100 1.85 s → 6.0 ms after D99, C 6.4 ms |
 | 12 | E2 | ☑ | Prediction written? ☑ (pushed first, 1f92400). 596 tests (6 on Postgres skipped locally), 99.7% coverage; 70 kill runs, 0 errors. Killed at 20 of 40: broken loses 20, job stays running forever; fixed loses 0, redoes 4, recovers in 31.8 s (stuck after 30 s); heartbeat = 15 of 139 writes per job |
-| 13 | E3 | ☐ | Prediction written? ☐ |
+| 13 | E3 | ☑ | Prediction written? ☑ (pushed first, 87b1a6a). 641 tests (6 on Postgres skipped locally), 99.7% coverage; 120 builds (Mac + GitHub Actions), 0 failed, all 5 images start. Simple → careful image: Mac 1,331 → 259 MB (5.1×), GitHub 1,220 → 207 MB (5.9×); 98% of the gap is the base image alone; one-line change rebuild 15.6 → 0.5 s (Mac) |
 | 14 | E4 | ☐ | Prediction written? ☐ |
 | 15 | Extras (TR vs EN, one-command rerun) | ☐ | |
 | 16 | Interface mockup approved | ☐ | |
@@ -40,6 +40,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 - D77–D86 (Docker, demo mode, CI, release) and the D55 note (compose sets 12 s) · Approved by Adar: ☑ (7 Nov 2026)
 - D95–D98 (E1) · Approved by Adar: ☑ (8 Nov 2026); D96 addition (probes from their own process) approved 8 Nov 2026; D99 (/health is async def, Adar's decision and wording) 8 Nov 2026
 - D100–D104 (E2) · Approved by Adar: ☑ (9 Nov 2026), with the review's wording changes (restart, heartbeat cost, blocking calls)
+- D105–D107 (E3) · Approved by Adar: ☑ (9 Nov 2026); D106 update (uncompressed size = sum of the layers, Mac run repeated) Adar's decision 9 Nov 2026
 - D87–D93 (real AI measurements; D88 and D93 reworded as Adar asked) and the D82 "done" note · Approved by Adar: ☑ (8 Nov 2026); D89 update (memory emptied before every run) and D91 addition approved 8 Nov 2026; D94 (10-minute heat-up) approved 8 Nov 2026
 
 ## Interface parity (fill in at slice 17)
@@ -161,6 +162,14 @@ Slice 12 (E2, limits for the README, and leftovers):
 - Flaky Slice 11 test fixed (own commit): `test_probes_leave_on_the_clock_while_nothing_answers` checked real probe lateness (< 20 ms) and failed about 1 run in 6 under coverage. The pretend server now stays frozen until it has received 6 rounds of probes, so no clock is involved; breaking the load test on purpose makes it fail. 20 full runs in a row passed.
 - Rerun: `caffeinate -dims uv run python -m bench.e2_kill` (about 2 h 10 min, Docker Desktop open; `--part main|stale|sensitivity|cost|ai` redoes one part; `--trial DIR` is a short check). Charts: `uv run --group bench python -m bench.charts`.
 
+Slice 13 (E3, limits for the README, and leftovers):
+- **Key numbers** (`docs/experiments.md`; median of 5 interleaved rounds). Size uncompressed / compressed: pip-bad 1,331 / 450 MB, pip-slim 286 / 95, uv-good 259 / 71 (Mac); 1,220 / 453, 230 / 92, 207 / 69 (GitHub, x86). Base image alone = 98% of the gap pip-good → uv-good on both; uv + two stages 2% (mostly pip's 26 MB download cache); layer order 0 MB. Times on the Mac, cold / one-line change / added package: pip-bad 19.9 / 15.6 / 14.9 s, pip-good 19.8 / 0.5 / 15.3 s, uv-bad 5.5 / 2.8 / 3.0 s, uv-good 5.5 / 0.5 / 3.0 s; GitHub: pip about twice as fast (faster network), same order.
+- Prediction: sizes right or close (simple image above the 1–1.2 GB range: 1,331 / 1,220 MB); base image as the main cause right; times wrong (pip and uv much faster than guessed; the bad-order rebuild reason right); Dockerfile 2.1× longer, not 3×; slim has no curl, right; "forgotten copy line" not tested.
+- **For Adar:** write "Why it happens" and "Takeaway" for E3 in `docs/experiments.md` in his own words (placeholders marked). Be able to explain layer order (Docker reuses a saved step only while everything it was built from is unchanged) and multi-stage builds.
+- Docker Desktop's image size (`docker image inspect`, containerd store) counts each layer twice (unpacked + compressed copy). Found after the first full Mac run; that run was replaced (D106 update).
+- The GitHub run has its own manual workflow (`e3.yml`, D107); it never runs on push, so normal CI and E4 timings are unaffected.
+- Rerun: `caffeinate -dims uv run python -m bench.e3_build` (about 11 minutes, Docker Desktop open; clears Docker's build cache for every project; `--trial DIR` is one round). GitHub: `gh workflow run e3.yml`, then download the `e3-results` artifact into `bench/data/`. Charts: `uv run --group bench python -m bench.charts`.
+
 ## Session log
 - 6 Nov 2026 — Planning finished in Claude app. Starting documents created. Tools installed. Decision log D01–D41 approved.
 - 6 Nov 2026 — Slice 0 done: uv project (Python 3.12, exact pins + `uv.lock`), folders, `app/settings.py`, `/health` + tests, `.env.example`, `.gitignore`, MIT licence, placeholder README, `ci.yml` (ruff + pytest, 85% gate).
@@ -176,3 +185,4 @@ Slice 12 (E2, limits for the README, and leftovers):
 - 8 Nov 2026 — Slice 10 done: 100 synthetic Turkish reviews (`bench/data/reviews_tr.csv`), `bench/measure_ollama.py` (setup check and notes, memory emptied and 3 warm-ups before every run, one at a time, 1/2/4/8 at once × 3 interleaved, Kuyruk's own `prepare_for_ai` and `OllamaAI`), `bench/charts.py` (3 charts in `docs/charts/`), fake AI replays the 4-at-once times by default, placeholder deleted. Findings: one request at a time (MLX engine), prefix cache, Mac slows when warm (one-at-a-time redone after a 10-minute heat-up; cool run kept). D87–D94 approved. Review: three small fixes in the measuring script.
 - 8 Nov 2026 — Slice 11 done: prediction pushed first (d809ba5). Experiment addresses `/experiments/e1/…` (off by default, 404, never with demo mode; D95), `bench/e1_load.py` (fixed-clock probes from their own process, safeguards checked and recorded; D96–D98), 80 sleep runs + 15 real-AI runs, two charts, `docs/experiments.md` E1 method/results/surprises filled. D95–D98 approved. Review: fixes 1–9 done, 10 kept; /health made async def (D99) and confirmed with a short rerun.
 - 9 Nov 2026 — Slice 12 done: prediction pushed first (1f92400). Experiment address `/experiments/e2/jobs/{ticket}/run-in-api` (BackgroundTasks running the worker's own code, off by default; D100), `bench/e2_kill.py` + `bench/e2_compose.yaml` (own Compose project, real SIGKILL halfway, database read every 100 ms; D101–D104), 65 fake-AI kill runs + 3 cost jobs + 5 real-AI kill runs, two charts, `docs/experiments.md` E2 method/results/surprises filled. D100–D104 approved. Review: 9 fixes (restart wording, heartbeat cost, blocking-call note, approval status, failed-run rows, no 120 s wait without a kill, stale line from data, real-AI label, demo-only lines left out: 105 recovery lines); finding 8 (Ollama client left open) was not real: the client closes after every text.
+- 9 Nov 2026 — Slice 13 done: prediction pushed first (87b1a6a). Five E3 Dockerfiles in `docker/` (pip-slim identical to pip-good except FROM, checked by a test), `bench/e3_build.py`, manual `e3.yml` workflow, two charts, E3 write-up filled (Why/Takeaway left for Adar). D105–D107 approved; D106 updated (layer-sum size) and the Mac run repeated. Mac and GitHub runs: 120/120 builds ok.

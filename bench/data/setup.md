@@ -198,3 +198,13 @@ the rest added by hand.
 - A separate check before the full run: a cold uv-good build after
   `docker builder prune -af` downloaded all 35 libraries ("Prepared 35
   packages"), so a cold build really starts from nothing.
+
+### E3 on GitHub Actions (D107)
+
+| | |
+|---|---|
+| Run | `e3.yml`, run 42630112801, started by hand; 9 Nov 2026, 13:58–14:09 UTC, 10 min 58 s |
+| Kuyruk commit | `6348139` (same script as the Mac run) |
+| Machine | `ubuntu-24.04` runner: Linux 7.0.0-1017-azure, x86_64, 4 CPUs, 16.8 GB memory |
+| Docker | Engine 28.0.4, storage overlay2 (standard store) |
+| Results | all 60 builds worked; all 5 images started; files downloaded from the run's `e3-results` artifact as `e3_builds_ci.csv`, `e3_images_ci.csv` |

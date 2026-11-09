@@ -1,0 +1,8 @@
+environment,image,image_bytes,compressed_bytes,starts,has_curl,lines
+ci,pip-bad,1219916784,453168874,yes,yes,11
+ci,pip-good,1219916911,453162738,yes,yes,12
+ci,uv-bad,206674636,69422578,yes,no,23
+ci,uv-good,206674636,69412995,yes,no,23
+ci,pip-slim,229686902,91574210,yes,no,12
+ci,base-full,1109700285,404756133,,yes,
+ci,base-slim,119470750,43192925,,no,
