@@ -55,6 +55,15 @@ exist:
 And the E4 key numbers: median (min-max) of the job and of each part, with
 the cache on and off, uv's own download times, and the secret checks (D109).
 
+Turkish vs English cost (Slice 15, spec 9.5), from `cost_tokens.csv` made by
+`bench/cost_tr_en.py`, if it exists:
+
+- `cost_tr_en.png`: Turkish tokens ÷ English tokens per length group, for
+  Kuyruk's tokenizer (o200k_base) and Gemma's; each review a dot, the sum
+  ratio (D112) a line with its percentage.
+
+And its key numbers (sum ratio, median per review, tokens per word).
+
 matplotlib (the charting library) is in the separate `bench` dependency group,
 so Kuyruk itself, its tests and its Docker image don't need it. Run:
 
@@ -72,6 +81,8 @@ import matplotlib
 # Draw straight to files; no window is opened.
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402 (must come after the line above)
+
+from bench import cost_sums  # noqa: E402 (shared sums; loads nothing from app/)
 
 DATA = Path(__file__).parent / "data"
 CHARTS = Path(__file__).parent.parent / "docs" / "charts"
@@ -627,7 +638,7 @@ def e2_lost_redone_chart(runs: list[dict]) -> None:
                 fontsize=9,
             )
         axes.set_xticks(range(len(groups)), [g[0] for g in groups])
-        axes.set_xlim(-0.6, len(groups) - 0.4)
+        axes.set_xlim(-0.6, len(groups) - 0.3)
         axes.set_ylim(bottom=-0.5)
         style(axes, title, "", "Texts")
     figure.suptitle(
@@ -1186,6 +1197,96 @@ def e4_charts() -> None:
     e4_numbers(runs, steps, secrets)
 
 
+# Cost: one fixed colour and marker shape per tokenizer (the shape also tells
+# them apart without colour).
+COST_STYLE = {
+    "o200k": (SERIES, "o", "Kuyruk's budget tokenizer (o200k_base)"),
+    "gemma": (SERIES_2, "s", "Gemma's own tokenizer (from Ollama)"),
+}
+
+
+def cost_chart(rows: list[dict]) -> None:
+    """Turkish ÷ English tokens per length group, both tokenizers.
+
+    Each review is a dot (spread sideways a little so they don't hide each
+    other); the line across each group's dots is the sum ratio, all Turkish
+    tokens ÷ all English tokens, which is the number judged (D112). The
+    dashed line at 1 means "same as English".
+    """
+    figure, axes = plt.subplots(figsize=(9, 5))
+    groups = [*cost_sums.GROUPS, None]
+    for place, group in enumerate(groups):
+        part = cost_sums.in_group(rows, group)
+        for side, what in enumerate(cost_sums.TOKENIZERS):
+            colour, marker, name = COST_STYLE[what]
+            values = cost_sums.ratios(part, what)
+            if not values:
+                continue
+            centre = place + (side - 0.5) * 0.42
+            offsets = [((i % 7) - 3) * 0.018 for i in range(len(values))]
+            axes.scatter(
+                [centre + o for o in offsets],
+                values,
+                color=colour,
+                marker=marker,
+                s=26,
+                alpha=0.75,
+                edgecolor=SURFACE,
+                linewidth=0.6,
+                zorder=3,
+                label=name if place == 0 else None,
+            )
+            total = cost_sums.sum_ratio(part, what)
+            axes.plot([centre - 0.13, centre + 0.13], [total, total], color=TEXT, lw=2)
+            # The percentage sits just right of the line, on a small patch of
+            # background, so the dots never cover it.
+            axes.annotate(
+                cost_sums.percent_more(total),
+                xy=(centre + 0.14, total),
+                va="center",
+                ha="left",
+                color=TEXT,
+                fontsize=9,
+                bbox={"facecolor": SURFACE, "edgecolor": "none", "pad": 1},
+                zorder=4,
+            )
+    axes.axhline(1.0, color=MUTED, linestyle="--", linewidth=1)
+    axes.annotate(
+        "same as English",
+        xy=(-0.58, 1.0),
+        xytext=(0, 4),
+        textcoords="offset points",
+        ha="left",
+        color=MUTED,
+        fontsize=8,
+    )
+    counts = [len(cost_sums.in_group(rows, g)) for g in groups]
+    axes.set_xticks(
+        range(len(groups)),
+        [f"{g or 'all'} ({n})" for g, n in zip(groups, counts, strict=True)],
+    )
+    axes.set_xlim(-0.6, len(groups) - 0.3)
+    axes.legend(frameon=False, loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=2)
+    style(
+        axes,
+        "Tokens for the same review: Turkish ÷ English "
+        "(line = all Turkish ÷ all English)",
+        "",
+        "Turkish ÷ English",
+    )
+    save(figure, "cost_tr_en.png")
+
+
+def cost_charts() -> None:
+    """Draw the cost chart and print its numbers, if it has been measured."""
+    if not (DATA / "cost_tokens.csv").exists():
+        return
+    rows = cost_sums.read_rows(DATA / "cost_tokens.csv")
+    cost_chart(rows)
+    for line in cost_sums.summary_lines(rows):
+        print(line)
+
+
 def main() -> None:
     """Draw all the charts and print the key numbers."""
     alone_rows = read("ollama_times.csv")
@@ -1215,6 +1316,7 @@ def main() -> None:
     e2_charts()
     e3_charts()
     e4_charts()
+    cost_charts()
     print(f"Charts written to {CHARTS}.")
 
 

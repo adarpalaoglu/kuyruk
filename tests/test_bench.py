@@ -360,3 +360,14 @@ def test_new_setup_notes_never_erase_earlier_ones(monkeypatch, tmp_path):
     assert "written by hand" in text
     assert text.count("## New full run") == 1
     assert text.count("| Ollama version | 0.40.15 |") == 2
+
+
+def test_setup_check_can_leave_out_the_charger(monkeypatch):
+    """The one-command rerun checks the charger itself (no repeated line)."""
+    monkeypatch.setattr(
+        measure_ollama, "model_digest", lambda: measure_ollama.MODEL_DIGEST
+    )
+    monkeypatch.setattr(measure_ollama, "ollama_parallel_setting", lambda: 8)
+    monkeypatch.setattr(measure_ollama, "plugged_in", lambda: False)
+    assert measure_ollama.check_setup() == [measure_ollama.CHARGER_PROBLEM]
+    assert measure_ollama.check_setup(charger=False) == []

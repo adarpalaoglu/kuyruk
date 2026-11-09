@@ -587,6 +587,31 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 - **Why:** every claim points to a run anyone can open; the fork case can't be produced with one account.
 - **Date:** 9 Nov 2026 · **Status:** Approved by Adar (9 Nov 2026)
 
+### D110 — The Turkish vs English sample
+- **Decision:** 50 of the 100 reviews: 17 short, 17 medium, 16 long by length, picked at random inside each group with seed 15. English made by Claude, checked by Adar on 5 pairs; emails and phone numbers kept identical.
+- **Why:** the same mix of lengths as all 100, and the same choice on every rerun; identical emails and phones are hidden the same way in both languages, so only the language differs.
+- **Date:** 9 Nov 2026 · **Status:** Approved by Adar (9 Nov 2026)
+
+### D111 — How Gemma's tokens are counted
+- **Decision:** Gemma tokens counted with Ollama's raw mode (`/api/generate`, `raw: true`: the text only, no instruction or chat wrapper). Every text counted twice and the counts must match.
+- **Why:** Ollama has no "count tokens" address; raw mode counts only the review, and counting twice proves the count isn't changed by anything Ollama remembers.
+- **Date:** 9 Nov 2026 · **Status:** Approved by Adar (9 Nov 2026)
+
+### D112 — Which number judges "30–60% more"
+- **Decision:** the prediction is judged on the sum ratio (all Turkish tokens ÷ all English tokens). The median per review is shown, not judged.
+- **Why:** the sum ratio is what a batch of reviews actually costs; single short reviews swing widely.
+- **Date:** 9 Nov 2026 · **Status:** Approved by Adar (9 Nov 2026)
+
+### D113 — One-command rerun
+- **Decision:** `bench/run_all.py` runs every experiment in a fixed order, each script as documented, and stops at the first failure. It quits Docker Desktop for the parts first measured with it closed and opens it for E2 and E3, includes the GitHub runs (E3 on GitHub, E4), and needs a clean, pushed commit.
+- **Why:** reruns repeat the original conditions; the Mac's and GitHub's runs test the same commit.
+- **Date:** 9 Nov 2026 · **Status:** Approved by Adar (9 Nov 2026)
+
+### D114 — The number check
+- **Decision:** `--charts-only` checks every Results-table cell plus the headline ratios, each in its own experiment's section. Prose and verdicts are not checked. Mismatches are reported, never fixed automatically.
+- **Why:** proves the write-up still matches the saved data; rewording sentences shouldn't break it, and only a person should change a written result.
+- **Date:** 9 Nov 2026 · **Status:** Approved by Adar (9 Nov 2026)
+
 ---
 
 ## Presentation

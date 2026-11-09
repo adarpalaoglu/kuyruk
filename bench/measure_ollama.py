@@ -428,14 +428,19 @@ def model_digest() -> str:
     return ""
 
 
+CHARGER_PROBLEM = "The Mac is on battery. Plug in the charger."
+
+
 def plugged_in() -> bool:
     """True if the Mac is running on the charger, not the battery."""
     return "AC Power" in command_output("pmset", "-g", "batt")
 
 
-def check_setup() -> list[str]:
-    """Everything that must be true before measuring; returns what's wrong."""
-    problems = []
+def check_model() -> list[str]:
+    """Ollama answers and has the pinned model (D92); returns what's wrong.
+
+    Shared with the cost count (`bench/cost_tr_en.py`), which needs only this.
+    """
     try:
         digest = model_digest()
     # No answer at all (HTTPError), or an answer that isn't Ollama's list of
@@ -444,10 +449,22 @@ def check_setup() -> list[str]:
     except (httpx.HTTPError, ValueError, KeyError, TypeError):
         return ["Ollama doesn't answer. Open the Ollama app and try again."]
     if digest != MODEL_DIGEST:
-        problems.append(
+        return [
             f"The model {settings.ollama_model} is not the pinned one "
             f"(found digest {digest or 'none'}, expected {MODEL_DIGEST})."
-        )
+        ]
+    return []
+
+
+def check_setup(charger: bool = True) -> list[str]:
+    """Everything that must be true before measuring; returns what's wrong.
+
+    `charger=False` leaves out the charger check, for a caller that checks
+    the charger itself (the one-command rerun, `bench/run_all.py`).
+    """
+    problems = check_model()
+    if problems and problems[0].startswith("Ollama doesn't answer"):
+        return problems
     parallel = ollama_parallel_setting()
     if parallel is None or parallel < PARALLEL_NEEDED:
         problems.append(
@@ -455,8 +472,8 @@ def check_setup() -> list[str]:
             "needed. Run `launchctl setenv OLLAMA_NUM_PARALLEL 8`, then quit "
             "and reopen the Ollama app."
         )
-    if not plugged_in():
-        problems.append("The Mac is on battery. Plug in the charger.")
+    if charger and not plugged_in():
+        problems.append(CHARGER_PROBLEM)
     return problems
 
 

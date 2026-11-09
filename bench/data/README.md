@@ -15,6 +15,20 @@ Columns: `id`, `text`. 34 short (up to 200 characters), 33 medium (201–800),
 without Turkish letters, some contain emoji, and 12 contain an email or phone
 number, which Kuyruk hides before the AI sees the text.
 
+## `reviews_tr_en.csv` — English versions of 50 reviews (AI-MADE, D110)
+
+**Translated by Claude (an AI), not by a person**, for the Turkish vs English
+cost count (Slice 15). Adar checked 5 pairs. 50 of the 100 reviews: 17 short,
+17 medium, 16 long, picked at random inside each length group with a fixed
+seed (15; `uv run python -m bench.cost_tr_en --pick` prints the choice).
+Same meaning, same emoji, and the same made-up emails and phone numbers,
+character for character; casual reviews stay casual. Where the Turkish
+"eşim" (my spouse) doesn't say wife or husband, the English says "my
+partner".
+
+Columns: `id` (as in `reviews_tr.csv`, where the Turkish text is), `group`
+(`short`, `medium`, `long`), `text_en`.
+
 ## Real AI times (Slice 10, spec 9.0)
 
 Made by `bench/measure_ollama.py` with Gemma 4 E4B on Ollama on a MacBook Air.
@@ -113,3 +127,58 @@ runs; setup in `setup.md`. Every run has its link (`url`). Times in seconds.
   `workflow`, `event`, `branch`, `run_id`, `url`, `created_at`,
   `secret_present` (`yes`, `no`, or `step not run` when the job was
   skipped), the printed `line`, and a `note`.
+
+## Turkish vs English cost (Slice 15)
+
+Made by `bench/cost_tr_en.py` (D110–D112); setup in `setup.md`. Each text is
+counted as the AI receives it (after `prepare_for_ai`).
+
+- `cost_tokens.csv` — one row per review (50): `id`, `group`, then for
+  Turkish (`_tr`) and English (`_en`): `characters`, `words` (pieces between
+  spaces), `o200k` (Kuyruk's budget tokenizer, `o200k_base`) and `gemma`
+  (Gemma's own count from Ollama, raw mode, every text counted twice and
+  equal, D111).
+
+## Rerun everything (Slice 15, D113)
+
+One command reruns every experiment, one after another, then redraws every
+chart and checks the numbers in `docs/experiments.md`:
+
+    uv run --group bench python -m bench.run_all
+
+It takes about 5 h 20 min:
+
+| Part | Command it runs | About | Docker Desktop |
+|---|---|---|---|
+| Real AI times (Slice 10) | `uv run python -m bench.measure_ollama` | 50 min | closed |
+| E1 | `uv run python -m bench.e1_load` | 65 min | closed |
+| E1 after the fix (D99) | `uv run python -m bench.e1_load --after-fix` | 2 min | closed |
+| Turkish vs English cost | `uv run python -m bench.cost_tr_en` | 3 min | closed |
+| E2 | `uv run python -m bench.e2_kill` | 2 h 10 min | open |
+| E3 on the Mac | `uv run python -m bench.e3_build` | 11 min | open |
+| E3 on GitHub | starts `e3.yml`, waits, downloads `e3-results` into the `_ci` files | 12 min | — |
+| E4 | `uv run python -m bench.e4_ci` | 50 min | — |
+| Charts + number check | `bench/charts.py`, `bench/check_numbers.py` | 1 min | — |
+
+Before anything runs it checks, and lists every problem at once with what to
+do: the charger is plugged in; Ollama answers with the pinned model and its
+parallel setting 8; Docker Desktop is installed (the rerun opens it itself before E2); macOS's
+connection limit is raised (`kern.ipc.somaxconn` 4096, undone by a restart);
+`gh` is logged in; everything is committed and that commit is the newest on
+GitHub's main (E3 and E4 on GitHub test the pushed commit). It quits Docker
+Desktop before the first part and opens it before E2, keeps the Mac awake,
+stops at the first part that fails, and prints how long each part took.
+
+- `--check-only`: only the prerequisite check and the expected times.
+- `--charts-only`: only redraw the charts from these CSV files and check that
+  every Results-table number in `docs/experiments.md` (plus the headline
+  ratios) still matches them (D114). No Ollama, Docker or GitHub; about a
+  minute. Exit code 1 if any number differs.
+
+After a full rerun the new data will usually differ a little, so the number
+check lists what changed; `docs/experiments.md` and its verdicts must then be
+updated by hand. Two things a rerun can't redo: `ollama_times_cool.csv` (the
+first run on a cool Mac) is kept as it is; and E1's main runs now measure
+today's `/health`, which is `async def` since D99, so E1's "before" numbers
+(plain-def `/health`) come back only by running E1 on the commit before the
+fix (`d809ba5`).

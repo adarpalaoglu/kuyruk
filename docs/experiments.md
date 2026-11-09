@@ -82,7 +82,7 @@ time zero.
 | | C50 | 5.5 ms | 6.4 ms (6.1–7.9) | 5.1 ms | 0.6 s |
 | 1 s | A50 | 38.7 s | 61.7 s (61.3–62.0) | 48.1 s | 50.6 s |
 | | B50 | 8.1 ms | 867 ms (862–875) | 5.8 ms | 2.1 s |
-| | B100 | 455 ms | 1,846 ms (1,845–1,868) | 6.5 ms | 3.1 s |
+| | B100 | 455 ms | 1,845 ms (1,845–1,868) | 6.5 ms | 3.1 s |
 | | C50 | 5.8 ms | 6.4 ms (5.9–7.5) | 5.2 ms | 1.1 s |
 | 2 s | A50 | 86.2 s | 132.0 s (126.9–132.3) | 103.0 s | 100.6 s |
 | | B50 | 9.2 ms | 1,767 ms (1,760–1,775) | 5.9 ms | 4.1 s |
@@ -90,7 +90,7 @@ time zero.
 | | C50 | 5.8 ms | 6.4 ms (6.2–6.8) | 4.9 ms | 2.1 s |
 | 4 s | A50 | 161.7 s | 251.9 s (251.6–252.0) | 229.7 s | 200.7 s |
 | | B50 | 10.7 ms | 3,578 ms (3,576–3,580) | 8.4 ms | 8.1 s |
-| | B100 | 2,013 ms | 7,407 ms (7,385–7,426) | 15.2 ms | 12.1 s |
+| | B100 | 2,012 ms | 7,407 ms (7,385–7,426) | 15.2 ms | 12.1 s |
 | | C50 | 6.0 ms | 6.9 ms (6.7–7.7) | 5.1 ms | 4.1 s |
 
 Real-AI check (10 requests to Gemma; one answer alone took a median of
@@ -111,7 +111,7 @@ setup, B50 and B100 at a 1 s wait, 5 repeats each, interleaved (rows marked
 |---|---|---|---|---|
 | B50, before (plain-def /health) | 8.1 ms | 867 ms (862–875) | 5.8 ms | 2.1 s |
 | B50, after (async /health) | 4.8 ms | 5.6 ms (5.3–5.7) | 4.9 ms | 2.1 s |
-| B100, before (plain-def /health) | 455 ms | 1,846 ms (1,845–1,868) | 6.5 ms | 3.1 s |
+| B100, before (plain-def /health) | 455 ms | 1,845 ms (1,845–1,868) | 6.5 ms | 3.1 s |
 | B100, after (async /health) | 4.6 ms | 6.0 ms (5.7–6.3) | 5.3 ms | 3.1 s |
 
 /health's p95 dropped about 150× (B50) and 300× (B100) and now matches the
@@ -721,3 +721,102 @@ For the same review, how many more tokens does Turkish need than English, with K
 
 ### Prediction
 Cost prediction (Adar, 9 Nov 2026, before running): Turkish needs more tokens than English for the same review, about 30–60% more with Kuyruk's tokenizer, because Turkish builds long words from many endings, and tokenizers are trained mostly on English, so they split Turkish words into more pieces. With Gemma's tokenizer, which is built for many languages, the gap is smaller but still there.
+
+### Method
+- **The reviews** (D110): 50 of the 100 synthetic Turkish reviews
+  (`bench/data/reviews_tr.csv`), picked at random inside each length group
+  with a fixed seed (15): 17 short (up to 200 characters), 17 medium
+  (201–800), 16 long (801–2,000), in proportion to the groups' sizes.
+- **The English versions** (`bench/data/reviews_tr_en.csv`) were translated
+  by Claude (an AI), not by a person: same meaning, same emoji, and the same
+  made-up emails and phone numbers, character for character. Casual reviews
+  stay casual (all lower case where the Turkish was). Adar checked 5 pairs
+  before counting.
+- **What is counted**: each text as the AI receives it, i.e. after
+  `prepare_for_ai` (emails and phone numbers hidden as `[EMAIL]` and
+  `[TELEFON]` in both languages).
+- **Two tokenizers.** `o200k_base`, the one Kuyruk's daily budget uses
+  (`count_tokens`, an approximation of Gemma's, spec 2.2). And Gemma's own,
+  from Ollama (D111): Ollama has no "count tokens" address, so each text was
+  sent to `/api/generate` in raw mode, which reads the text exactly as given
+  (no instruction, no chat wrapper), asking for a 1-token answer; Ollama
+  reports how many tokens it read. Every text was counted twice (the second
+  time in the opposite order) and all 100 counts matched. Cross-check: for 3
+  reviews in both languages, the text inside Kuyruk's real chat request
+  added exactly as many tokens as the raw count (difference 0 in all 6).
+- **Judged number** (D112): the sum ratio, all Turkish tokens ÷ all English
+  tokens, which is what 50 reviews cost. The median of each review's own
+  ratio is shown too, not judged.
+- Script `bench/cost_tr_en.py` (about 2 minutes); setup in
+  `bench/data/setup.md`; data `bench/data/cost_tokens.csv`; chart
+  `docs/charts/cost_tr_en.png`.
+
+### Results
+**Tokens for the same 50 reviews** (Turkish ÷ English: above 1 means Turkish
+needs more)
+
+| Tokenizer | Group | Reviews | Turkish tokens | English tokens | All TR ÷ all EN | Median per review |
+|---|---|---|---|---|---|---|
+| o200k_base (Kuyruk) | short | 17 | 446 | 372 | 1.20 (+20%) | 1.25 |
+| | medium | 17 | 2,597 | 2,116 | 1.23 (+23%) | 1.23 |
+| | long | 16 | 6,077 | 4,887 | 1.24 (+24%) | 1.25 |
+| | **all** | **50** | **9,120** | **7,375** | **1.24 (+24%)** | **1.25** |
+| Gemma (from Ollama) | short | 17 | 422 | 381 | 1.11 (+11%) | 1.17 |
+| | medium | 17 | 2,470 | 2,211 | 1.12 (+12%) | 1.11 |
+| | long | 16 | 5,857 | 5,161 | 1.13 (+13%) | 1.15 |
+| | **all** | **50** | **8,749** | **7,753** | **1.13 (+13%)** | **1.14** |
+
+**Words and pieces per word** (all 50 reviews)
+
+| | Turkish | English |
+|---|---|---|
+| Words | 4,300 | 6,379 |
+| o200k_base tokens per word | 2.12 | 1.16 |
+| Gemma tokens per word | 2.03 | 1.22 |
+
+**Review by review**
+
+| Tokenizer | Turkish more | Same | Turkish fewer | Smallest ratio | Largest ratio |
+|---|---|---|---|---|---|
+| o200k_base | 48 | 2 | 0 | 1.00 | 1.67 |
+| Gemma | 43 | 2 | 5 | 0.88 | 1.67 |
+
+Turkish needs more tokens with both tokenizers, and the gap hardly depends
+on length (o200k_base +20% to +24%, Gemma +11% to +13% per group). Turkish
+uses a third fewer words for the same review (4,300 vs 6,379), but each
+word is cut into 1.7–1.8 times as many pieces.
+
+**My prediction, part by part:**
+
+| Prediction | Result | Verdict |
+|---|---|---|
+| Turkish needs more tokens than English for the same review | yes with both tokenizers: +24% (o200k_base), +13% (Gemma); more in 48 and 43 of the 50 reviews | Right |
+| … about 30–60% more with Kuyruk's tokenizer | +23.7% (sum ratio 1.237; median per review 1.25) | Partly right: 21% below the range's lower edge (30%) |
+| … because Turkish builds long words from many endings, and tokenizers split Turkish words into more pieces | Turkish has a third fewer words but 2.12 pieces per word vs 1.16 (o200k_base) and 2.03 vs 1.22 (Gemma) | Right |
+| … tokenizers are trained mostly on English | not measured (needs the tokenizers' training data) | Not tested |
+| With Gemma's tokenizer the gap is smaller | +13% vs +24% (about half) | Right |
+| … but still there | +11% to +13% in every group; Turkish more in 43 of 50 reviews | Right |
+
+### Why it happens
+*[Adar writes this in his own words.]*
+
+### Surprises
+- **The gap is the same for short and long reviews.** Per group the sum
+  ratio moves by at most 4 points (o200k_base 1.20–1.24, Gemma 1.11–1.13).
+  Single short reviews swing widely, though: "Çok güzel ürün 👍" is 5
+  tokens against 3 for "Great product 👍" (1.67 with both tokenizers),
+  which is why the sum ratio is judged rather than single reviews.
+- **Gemma makes English dearer, not only Turkish cheaper.** Compared with
+  o200k_base, Gemma counts 4% fewer tokens for the Turkish (8,749 vs 9,120)
+  and 5% more for the English (7,753 vs 7,375); both moves shrink the gap.
+- **With Gemma, 5 Turkish reviews are cheaper than their English.** E.g. a
+  short review (35) whose English came out longer (40 words vs 28) took 50
+  Gemma tokens against 44 for the Turkish. So a translation's wording, not
+  only the language, moves single reviews.
+- **For Kuyruk's daily budget:** `o200k_base` counts Turkish about 4% *more*
+  tokens than Gemma really reads (9,120 vs 8,749), so the budget errs on
+  the safe side for Turkish texts, and slightly on the generous side for
+  English ones (7,375 vs 7,753, 5% fewer).
+
+### Takeaway
+*[Adar writes this in his own words.]*

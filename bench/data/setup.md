@@ -253,3 +253,41 @@ from GitHub's own records.
   and writes results to a side file that replaces the real one only at the
   end. The secrets file was collected again with it (same table; now with
   run 21 and its Release run).
+
+## Turkish vs English token cost (Slice 15)
+
+Written automatically by `bench/cost_tr_en.py`.
+
+| | |
+|---|---|
+| Date and time | 2026-11-09T22:55:19+03:00 |
+| Kuyruk commit | `11088827f80b972abd82db450376032b57dbccbe` plus uncommitted work |
+| Ollama version, model | 0.40.15, gemma4:e4b (digest `eb2177adf7646d15faead94fdad6d3e170dc8015653418a3b7d5d52a6380be5b`) |
+| Gemma count | `/api/generate`, raw mode, 1 token of answer; every text counted twice, all equal (D111) |
+| o200k count | Kuyruk's `count_tokens` (`o200k_base`) |
+| Reviews | 50 (17 short, 17 medium, 16 long; seed 15, D110) |
+
+Cross-check (raw count vs the same text inside Kuyruk's chat request):
+
+- Chat request with an empty text: 28 tokens.
+- Review 2 (short, tr): raw 19, in the chat request 19 (difference +0).
+- Review 2 (short, en): raw 17, in the chat request 17 (difference +0).
+- Review 26 (medium, tr): raw 86, in the chat request 86 (difference +0).
+- Review 26 (medium, en): raw 78, in the chat request 78 (difference +0).
+- Review 3 (long, tr): raw 267, in the chat request 267 (difference +0).
+- Review 3 (long, en): raw 225, in the chat request 225 (difference +0).
+
+### Cost run notes (added by hand)
+
+- This run (9 Nov 2026, 22:55) was measured with the Slice 15 script
+  `bench/cost_tr_en.py` before it was committed, on top of commit `1108882`
+  (the cost prediction); hence "plus uncommitted work" above.
+- The code review then changed the script, but not how it counts: the
+  shared sums moved to `bench/cost_sums.py`, "uncommitted work" is now read
+  before the run writes anything, and two helpers now come from
+  `bench/measure_ollama.py`. The counting itself (the choice of reviews,
+  `prepare_for_ai`, the raw-mode requests, counting twice, `o200k_base`) is
+  unchanged: with the reviewed script, a recount of all 50 reviews with real
+  Gemma (not saved) gave exactly the same 50 rows.
+- The script is committed, with those review changes only, in the Slice 15
+  commit: COMMIT_PENDING.
