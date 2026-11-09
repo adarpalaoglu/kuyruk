@@ -382,7 +382,19 @@ database and checks it is still alive: the worker and its heartbeat.
 ## E3 — Image size and rebuild time
 
 ### Question
+How much smaller is Kuyruk's Docker image, and how much faster does it rebuild after a small change, when it is built the careful way instead of the simple way, and what does that care cost?
+
 ### Prediction
+E3 prediction (Adar, 9 Nov 2026, before running):
+
+Image size. The simple image (full Python base image, everything installed in one stage) will be around 1–1.2 GB, mostly because the full Python base ships compilers and tools Kuyruk never uses. The optimised image (slim base, multi-stage, only the installed packages copied into the final stage) will be around 200–300 MB, so roughly 4–5 times smaller.
+
+Rebuild after changing one line of code. The simple version will take 30–60 s, because it copies all the code before installing packages, so any code change throws away the cached install and redoes it. The optimised version will take under 5 s, because packages are installed from the lockfile in an earlier layer that stays cached.
+
+Rebuild after adding one package. Both versions have to reinstall, so the gap will be much smaller: maybe 30–60 s for the simple one and 15–30 s for the optimised one, if uv’s download cache is reused.
+
+Cost of the fix. The Dockerfile will be about 3 times longer and harder to read for someone new. The main risk is forgetting to copy something into the final stage, which builds fine but breaks only when the container runs. The slim image also lacks tools like curl for debugging inside the container.
+
 ### Method
 ### Results
 ### Why it happens
