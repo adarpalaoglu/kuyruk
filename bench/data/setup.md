@@ -290,4 +290,4 @@ Cross-check (raw count vs the same text inside Kuyruk's chat request):
   unchanged: with the reviewed script, a recount of all 50 reviews with real
   Gemma (not saved) gave exactly the same 50 rows.
 - The script is committed, with those review changes only, in the Slice 15
-  commit: COMMIT_PENDING.
+  commit: `f0b487ad664969ae2d0f0b572244b2cfb1e12471` ("Slice 15: extras").
