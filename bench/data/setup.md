@@ -172,10 +172,10 @@ the rest added by hand.
 
 | | |
 |---|---|
-| Date and time | 9 Nov 2026, 15:59–16:10 (+03:00) |
+| Date and time | 9 Nov 2026, 16:44–16:54 (+03:00) |
 | Mac | MacBook Air (Mac16,12), Apple M4, 24 GB; macOS 15.7.3; on AC power |
-| Docker | Docker Desktop, Engine 29.9.2; its Linux VM: aarch64, 10 CPUs, 8.3 GB memory; containerd image store (sizes as `docker image inspect` reports them) |
-| Kuyruk commit | `f0bef90` (Slice 13 code) |
+| Docker | Docker Desktop, Engine 29.9.2; its Linux VM: aarch64, 10 CPUs, 8.3 GB memory; containerd image store |
+| Kuyruk commit | `4ffbb20` (Slice 13 code, sizes as the sum of the layers) |
 | Base images | `python:3.12.16-trixie` (full) and `python:3.12.16-slim-trixie`, both pinned by digest; pip 25.0.1 as shipped in them; uv 0.13.7 |
 | Extra package | `six==1.17.0` |
 | Rounds | 5, interleaved (rotated order); build cache cleared (`docker builder prune -af`) before every cold build; base images downloaded once before the run |
@@ -185,6 +185,12 @@ the rest added by hand.
 ### E3 run notes (added by hand after the run)
 
 - All 60 builds worked; all 5 images started and answered `/health`.
+- An earlier full run (15:59–16:10, commit `f0bef90`) read the uncompressed
+  size from `docker image inspect`. Docker Desktop's containerd image store
+  counts each layer twice there (unpacked + its compressed copy: e.g.
+  uv-good 331 MB = 259 + 71), so its sizes were replaced by this run, which
+  sums the layers (D106 update). Its build times agreed with this run's
+  (medians within 0.5 s); its compressed sizes were the same.
 - Before the full run, one trial round (not kept) gave the same sizes to
   within 0.01 MB, and the same uv times, but slower pip cold builds (32 and
   44 s instead of ~19 s): pip downloads every library during a cold build, so

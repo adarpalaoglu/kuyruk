@@ -1,8 +1,8 @@
 environment,image,image_bytes,compressed_bytes,starts,has_curl,lines
-mac,pip-bad,1783143391,449890331,yes,yes,11
-mac,pip-good,1783151255,449890135,yes,yes,12
-mac,uv-bad,331087398,71131969,yes,no,23
-mac,uv-good,331087350,71131519,yes,no,23
-mac,pip-slim,381224551,94691536,yes,no,12
-mac,base-full,1604685438,401350625,,yes,
-mac,base-slim,202757767,43485144,,no,
+mac,pip-bad,1330565120,449891567,yes,yes,11
+mac,pip-good,1330573312,449892734,yes,yes,12
+mac,uv-bad,259375104,71135287,yes,no,23
+mac,uv-good,259375104,71134014,yes,no,23
+mac,pip-slim,285966336,94693764,yes,no,12
+mac,base-full,1203814400,401350625,,yes,
+mac,base-slim,159207424,43485144,,no,
