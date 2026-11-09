@@ -577,6 +577,16 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 - **Why:** 5 rounds of 4 Dockerfiles × 3 builds would make every CI run much longer, and would skew E4, which times CI runs. GitHub's machine is x86 (Intel/AMD), not Apple's chip, so sizes may differ slightly; the write-up says so.
 - **Date:** 9 Nov 2026 · **Status:** Approved by Adar (9 Nov 2026)
 
+### D108 — How E4 measures the uv cache
+- **Decision:** 1 unrecorded warm-up run (cache on), then 20 manual CI runs (`gh workflow run ci.yml -f uv_cache=…`) on one commit: 10 on, 10 off, interleaved on-off-off-on, started one at a time (each starts when the previous one has finished). Job time = job start → end from GitHub's records; waiting for a machine recorded apart. Step times from the timestamps GitHub stamps on each log line (fractions of a second); GitHub's whole-second step times kept as a cross-check. Median and spread reported.
+- **Why:** one at a time and interleaved, so runs don't compete for machines or drift with time of day; the warm-up makes sure the cache exists; whole seconds are too coarse for a step that may take under a second.
+- **Date:** 9 Nov 2026 · **Status:** Approved by Adar (9 Nov 2026)
+
+### D109 — E4's secret evidence
+- **Decision:** the "secret present" lines from runs that already happened (push to main, push to own branch, pull request #1 from own branch, Release after a push) and from the 20 manual runs, each with its run link. Fork pull request: not tested live (D36); GitHub's documentation cited with its link and at most one short quoted line. Release runs that follow the manual runs are counted: each must show its publish job skipped.
+- **Why:** every claim points to a run anyone can open; the fork case can't be produced with one account.
+- **Date:** 9 Nov 2026 · **Status:** Approved by Adar (9 Nov 2026)
+
 ---
 
 ## Presentation

@@ -527,13 +527,6 @@ def test_parse_arguments_and_output_paths(tmp_path):
     assert e3_build.output_paths(options)[1] == tmp_path / "e3_images.csv"
 
 
-def test_csv_out_writes_rows_at_once(tmp_path):
-    out = e3_build.CsvOut(tmp_path / "x" / "a.csv", ["a", "b"])
-    out.write({"a": 1, "b": 2})
-    assert (tmp_path / "x" / "a.csv").read_text().splitlines() == ["a,b", "1,2"]
-    out.close()
-
-
 def test_setup_lines_name_the_machine_and_docker():
     runner = FakeRunner(
         answers={"docker version": "29.9.2\n", "docker info": "Linux\n"}

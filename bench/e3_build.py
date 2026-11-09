@@ -44,7 +44,6 @@ else is then slower once. Images and containers are not touched.
 """
 
 import argparse
-import csv
 import gzip
 import platform
 import shutil
@@ -56,6 +55,8 @@ import time
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
+
+from bench.csv_out import CsvOut
 
 ROOT = Path(__file__).parent.parent
 DATA = Path(__file__).parent / "data"
@@ -571,26 +572,6 @@ def measure_round(
 
 
 # ---- Output and the command line ---------------------------------------------
-
-
-class CsvOut:
-    """A CSV file written row by row, so nothing is lost if a run stops."""
-
-    def __init__(self, path: Path, columns: list[str]) -> None:
-        """Create the file with its header line."""
-        path.parent.mkdir(parents=True, exist_ok=True)
-        self.file = path.open("w", newline="")
-        self.writer = csv.DictWriter(self.file, fieldnames=columns)
-        self.writer.writeheader()
-
-    def write(self, row: dict) -> None:
-        """Add one row and save it to disk at once."""
-        self.writer.writerow(row)
-        self.file.flush()
-
-    def close(self) -> None:
-        """Close the file."""
-        self.file.close()
 
 
 def setup_lines(runner: Runner = run) -> list[str]:

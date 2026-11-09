@@ -580,7 +580,134 @@ How much time does uv's download cache save in a CI run, and which kinds of runs
 E4 prediction (Adar, 9 Nov 2026, before running): (a) Cache: With the cache off, every run must download all the libraries again, adding about 10–20 seconds to the job. With it on, installing takes only a few seconds. The total job time drops by about a quarter to a third. The tests themselves take the same time either way. (b) Secrets: A push to main and a pull request from my own branch both get the secret ("yes"). A pull request from a fork gets "no", because GitHub hides secrets from code written by outsiders. The release workflow has the secret but never runs pull-request code, so it can't leak it.
 
 ### Method
+- **(a) The cache** (`bench/e4_ci.py`, D108). Kuyruk's CI workflow
+  (`ci.yml`) installs the libraries with `uv sync`. With `uv_cache` on, the
+  setup-uv step first restores uv's download cache (27 MB, kept by GitHub
+  between runs) and the libraries come from it; with it off, uv downloads
+  them from PyPI. Started by hand (`gh workflow run ci.yml -f
+  uv_cache=true|false`, D83) on one commit (`95cf984`, the prediction): one
+  warm-up run with the cache on (not recorded), then 20 runs, 10 on and 10
+  off, in the order on-off-off-on repeated, each started only when nothing
+  else was running (checked 15 s after the previous run, so its Release run
+  had time to appear; in the first series the check came right away, and 3
+  times a Release run that took 1–6 s overlapped the next run's start; it
+  was skipped, so it used no machine). Job time = job start → end from GitHub's records (whole
+  seconds); each step's time from the timestamps GitHub puts on every log
+  line; uv's own "Prepared" (download) time from the install step.
+- **(b) The secret** (D109). Both workflows print one line, `secret present:
+  yes/no`, for the repository secret `DEMO_SECRET` (never its value). The
+  script read that line from every earlier run that has one (the `slice-9`
+  branch's pushes and pull request #1, pushes to main, Release runs after a
+  push) and from the 21 manual runs (the 20 of the series and the added
+  run 21; the warm-up is left out), and checked every Release run that
+  followed a manual run. A pull request from a fork was not tested live:
+  that needs a second GitHub account (D36).
+- Setup in `bench/data/setup.md`; raw data in `bench/data/e4_*.csv`; chart
+  `docs/charts/e4_cache.png`.
+
 ### Results
+**(a) The cache.** All 10 cache-on runs passed and found the cache (10 of
+10 "hit"). One cache-off run (run 2,
+[42637245172](https://github.com/adarpalaoglu/kuyruk/actions/runs/42637245172))
+failed in a test that has nothing to do with the cache (see Surprises), so
+it is left out, and one more cache-off run was added at the end (run 21,
+same commit, checked before recording): 10 cache-off runs count.
+
+| | Cache on (10 runs) | Cache off (10 runs) |
+|---|---|---|
+| **Job time** | **90 s (76–94)** | **90 s (79–93)** |
+| Postgres start-up | 7.1 s | 7.0 s |
+| setup-uv step (incl. restoring the cache) | 2.3 s (1.6–2.9) | 1.0 s (0.9–1.2) |
+| Install (`uv sync`) | 0.05 s | 0.48 s (0.28–0.69) |
+| … of which downloading 43 libraries (uv's "Prepared") | — (nothing downloaded) | 0.42 s (0.23–0.64) |
+| Cache save step at the end | 0.24 s | 0.14 s |
+| Tests (ruff, fast tests, Postgres tests) | 74.0 s (59.9–78.0) | 74.9 s (57.8–79.0) |
+| Waiting for a machine | 4 s | 4 s |
+
+Median (fastest–slowest). The cache saved about 0.4 s in the install step
+but cost about 1.3 s more to restore, so with the cache on the uv steps
+took about 1 s **longer**. The job medians are the same, 90 s, while
+single runs of the same kind differed by up to 18 s (the fast tests alone
+took 44–63 s).
+
+**(b) The secret.** Every run's line is in `bench/data/e4_secrets.csv` with
+its link.
+
+| Kind of run | Runs | Secret present | Example |
+|---|---|---|---|
+| CI, push to main | 6 | yes in all | [42380913514](https://github.com/adarpalaoglu/kuyruk/actions/runs/42380913514) |
+| CI, push to my own branch (`slice-9`) | 4 | yes in all | [42376438124](https://github.com/adarpalaoglu/kuyruk/actions/runs/42376438124) |
+| CI, pull request #1 from my own branch | 4 | yes in all | [42376452310](https://github.com/adarpalaoglu/kuyruk/actions/runs/42376452310) |
+| CI, started by hand (the cache runs, including run 21) | 21 | yes in all | [42636911120](https://github.com/adarpalaoglu/kuyruk/actions/runs/42636911120) |
+| Release, after a push to main | 6 | yes in all | [42381025257](https://github.com/adarpalaoglu/kuyruk/actions/runs/42381025257) |
+| Release, after a run started by hand | 21 | step never ran: publish job skipped in all 21 | [42637178490](https://github.com/adarpalaoglu/kuyruk/actions/runs/42637178490) |
+| CI, pull request from a fork | — | not tested live (D36) | — |
+
+**A pull request from a fork** (not tested live, D36): GitHub's
+documentation, [Using secrets in GitHub
+Actions](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets),
+says: "secrets are not passed to the runner when a workflow is triggered
+from a forked repository." (`GITHUB_TOKEN` is the one exception.) The check
+stays in `ci.yml`, so if a fork pull request ever arrives, its run will
+print the line by itself.
+
+**Release never runs pull-request code.** Release starts whenever CI
+finishes on main (it started after every one of the 21 manual runs too),
+but its publish job runs only if that CI run was a push to main in this
+repository, and then it builds exactly the commit CI tested (D84). In all
+21 Release runs after a manual run the job was skipped, so the step that
+reads the secret never ran. No Release run ever started for the
+`slice-9` branch or its pull request, because Release only follows CI runs
+on main.
+
+**About `pull_request_target`** (explained only, never used, D37): a
+workflow started by
+[`pull_request_target`](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request_target)
+runs in the context of the main repository, with its secrets and write
+permissions, even when the pull request comes from a stranger's fork. If
+such a workflow also checks out and runs the pull request's code, that code
+can read the secrets. That is why Kuyruk never uses it. Release's
+`workflow_run` has the same power, which is why its checks above must never
+be loosened (D84).
+
+**My prediction, part by part:**
+
+| Prediction | Result | Verdict |
+|---|---|---|
+| (a) With the cache off, every run downloads all the libraries again | it did: 43 libraries every cache-off run | Right |
+| … adding about 10–20 s to the job | the download took 0.4 s; the job medians were the same (90 s); the uv steps were about 1 s *shorter* with the cache off | Wrong |
+| With the cache on, installing takes only a few seconds | install 0.05 s; with restoring the cache 2.4 s | Right |
+| The total job time drops by about a quarter to a third | it didn't drop: 90 s with the cache on and 90 s off (0%) | Wrong |
+| The tests take the same time either way | 74.0 vs 74.9 s, well inside their 20 s spread | Right |
+| (b) A push to main and a pull request from my own branch both get "yes" | yes in all 6 pushes to main, 4 pushes to `slice-9` and 4 runs of pull request #1 | Right |
+| A pull request from a fork gets "no" | not tested live (D36); GitHub's documentation says secrets are not passed to it | Not tested (documented) |
+| The release workflow has the secret but never runs pull-request code | yes in all 6 Release runs after a push; it only builds the tested commit of a push to main; skipped after all 21 manual runs; never started for the branch or its pull request | Right |
+
 ### Why it happens
+*[Adar writes this in his own words.]*
+
 ### Surprises
+- **The cache saved nothing; its own steps were slightly slower.** On GitHub's machines
+  uv downloads all 43 libraries from PyPI in about 0.4 s, while restoring
+  the 27 MB cache from GitHub's cache storage takes about 1.3 s longer than
+  setting up uv without it.
+- **The tests' own variation hides everything else.** The fast tests alone
+  varied by 19 s between runs of the same kind (44–63 s), far more than the
+  whole install step.
+- **A flaky test turned up.** In cache-off run 2, `/health` answered in
+  0.134 s instead of under 0.1 s in a Slice 11 test
+  (`test_health_stays_fast_while_all_helper_threads_are_busy`), on a run
+  where nothing else differed. It passed in the other 21 runs. Its time
+  limit depended on the machine's speed; it is now 0.5 s, with the slow
+  requests holding the helper threads for 2 s, so the test still fails
+  clearly for a plain-def /health (1.9 s).
+- **Every manual run started a Release run too.** Release follows every
+  CI run on main, whatever started it; it is its job's checks that stop it
+  (skipped, shown grey), not the trigger.
+- **GitHub can briefly not know a run it just started.** In a first
+  attempt, asking about a new run a moment after starting it gave "not
+  found"; the script now retries for up to 2 minutes, and the series was
+  run again from the start (`bench/data/setup.md`).
+
 ### Takeaway
+*[Adar writes this in his own words.]*

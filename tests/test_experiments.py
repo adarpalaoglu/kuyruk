@@ -314,12 +314,17 @@ async def test_mode_a_holds_up_a_ping_and_mode_c_does_not(experiments_on):
 
 @pytest.mark.anyio
 async def test_health_stays_fast_while_all_helper_threads_are_busy(experiments_on):
-    """D99: 45 mode-B requests fill all ~40 helper threads for 0.4 s, yet
-    /health (async def, no helper thread needed) answers at once."""
+    """D99: 45 mode-B requests fill all ~40 helper threads for 2 s, yet
+    /health (async def, no helper thread needed) answers at once.
+
+    The limit is 0.5 s, not tighter: on GitHub's machines /health once took
+    0.13 s here (E4). A plain-def /health would have to wait for a free
+    helper thread, about 1.9 s, so it would still fail clearly.
+    """
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://e1") as client:
         slow = [
-            asyncio.create_task(client.get(SLEEPS[1], params={"seconds": 0.4}))
+            asyncio.create_task(client.get(SLEEPS[1], params={"seconds": 2.0}))
             for _ in range(45)
         ]
         # Let the slow requests take every helper thread first.
@@ -329,4 +334,4 @@ async def test_health_stays_fast_while_all_helper_threads_are_busy(experiments_o
         took = time.perf_counter() - start
         assert all(r.status_code == 200 for r in await asyncio.gather(*slow))
     assert reply.json() == {"status": "ok"}
-    assert took < 0.1
+    assert took < 0.5

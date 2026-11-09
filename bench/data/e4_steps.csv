@@ -1,0 +1,274 @@
+order,cache,run_id,step,log_s,api_s
+1,on,42636911120,Set up job,1.425,1.0
+1,on,42636911120,Initialize containers,6.919,7.0
+1,on,42636911120,Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,1.482,1.0
+1,on,42636911120,Secret check (E4),0.022,0.0
+1,on,42636911120,Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,2.614,3.0
+1,on,42636911120,Install dependencies,0.047,0.0
+1,on,42636911120,Ruff,0.074,0.0
+1,on,42636911120,Fast tests (coverage gate 85%),58.296,58.0
+1,on,42636911120,Postgres tests,15.307,16.0
+1,on,42636911120,Post Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.234,0.0
+1,on,42636911120,Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.269,0.0
+1,on,42636911120,Stop containers,0.264,0.0
+1,on,42636911120,Complete job,2.045,1.0
+2,off,42637245172,Set up job,1.414,1.0
+2,off,42637245172,Initialize containers,8.145,9.0
+2,off,42637245172,Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,4.247,4.0
+2,off,42637245172,Secret check (E4),0.022,0.0
+2,off,42637245172,Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,1.086,1.0
+2,off,42637245172,Install dependencies,0.33,0.0
+2,off,42637245172,Ruff,0.113,0.0
+2,off,42637245172,Fast tests (coverage gate 85%),59.516,60.0
+2,off,42637245172,Postgres tests,,0.0
+2,off,42637245172,Post Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,,0.0
+2,off,42637245172,Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.28,0.0
+2,off,42637245172,Stop containers,0.264,0.0
+2,off,42637245172,Complete job,1.113,0.0
+3,off,42637521132,Set up job,1.071,1.0
+3,off,42637521132,Initialize containers,6.587,6.0
+3,off,42637521132,Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,1.224,2.0
+3,off,42637521132,Secret check (E4),0.023,0.0
+3,off,42637521132,Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.988,1.0
+3,off,42637521132,Install dependencies,0.362,0.0
+3,off,42637521132,Ruff,0.118,0.0
+3,off,42637521132,Fast tests (coverage gate 85%),63.056,63.0
+3,off,42637521132,Postgres tests,15.809,16.0
+3,off,42637521132,Post Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.141,0.0
+3,off,42637521132,Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.313,0.0
+3,off,42637521132,Stop containers,0.26,1.0
+3,off,42637521132,Complete job,1.751,0.0
+4,on,42637872956,Set up job,0.829,1.0
+4,on,42637872956,Initialize containers,6.319,7.0
+4,on,42637872956,Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,1.044,1.0
+4,on,42637872956,Secret check (E4),0.026,0.0
+4,on,42637872956,Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,1.683,1.0
+4,on,42637872956,Install dependencies,0.055,0.0
+4,on,42637872956,Ruff,0.082,0.0
+4,on,42637872956,Fast tests (coverage gate 85%),61.715,62.0
+4,on,42637872956,Postgres tests,15.27,15.0
+4,on,42637872956,Post Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.242,1.0
+4,on,42637872956,Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.278,0.0
+4,on,42637872956,Stop containers,0.258,0.0
+4,on,42637872956,Complete job,1.259,0.0
+5,on,42638208486,Set up job,1.277,1.0
+5,on,42638208486,Initialize containers,7.103,8.0
+5,on,42638208486,Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,1.381,1.0
+5,on,42638208486,Secret check (E4),0.022,0.0
+5,on,42638208486,Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,2.63,3.0
+5,on,42638208486,Install dependencies,0.052,0.0
+5,on,42638208486,Ruff,0.074,0.0
+5,on,42638208486,Fast tests (coverage gate 85%),58.801,59.0
+5,on,42638208486,Postgres tests,15.32,15.0
+5,on,42638208486,Post Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.238,0.0
+5,on,42638208486,Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.25,0.0
+5,on,42638208486,Stop containers,0.251,1.0
+5,on,42638208486,Complete job,1.933,0.0
+6,off,42638489166,Set up job,0.846,1.0
+6,off,42638489166,Initialize containers,5.926,6.0
+6,off,42638489166,Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.98,1.0
+6,off,42638489166,Secret check (E4),0.023,0.0
+6,off,42638489166,Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,1.005,1.0
+6,off,42638489166,Install dependencies,0.566,0.0
+6,off,42638489166,Ruff,0.114,0.0
+6,off,42638489166,Fast tests (coverage gate 85%),58.757,59.0
+6,off,42638489166,Postgres tests,15.314,16.0
+6,off,42638489166,Post Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.141,0.0
+6,off,42638489166,Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.255,0.0
+6,off,42638489166,Stop containers,0.257,0.0
+6,off,42638489166,Complete job,1.312,0.0
+7,off,42639354213,Set up job,1.01,1.0
+7,off,42639354213,Initialize containers,7.025,7.0
+7,off,42639354213,Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,1.07,1.0
+7,off,42639354213,Secret check (E4),0.023,0.0
+7,off,42639354213,Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.968,1.0
+7,off,42639354213,Install dependencies,0.464,0.0
+7,off,42639354213,Ruff,0.115,0.0
+7,off,42639354213,Fast tests (coverage gate 85%),60.164,61.0
+7,off,42639354213,Postgres tests,15.693,15.0
+7,off,42639354213,Post Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.137,0.0
+7,off,42639354213,Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.276,1.0
+7,off,42639354213,Stop containers,0.257,0.0
+7,off,42639354213,Complete job,2.624,0.0
+8,on,42639644570,Set up job,1.011,1.0
+8,on,42639644570,Initialize containers,8.774,9.0
+8,on,42639644570,Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,1.131,1.0
+8,on,42639644570,Secret check (E4),0.019,0.0
+8,on,42639644570,Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,2.271,2.0
+8,on,42639644570,Install dependencies,0.039,0.0
+8,on,42639644570,Ruff,0.056,0.0
+8,on,42639644570,Fast tests (coverage gate 85%),51.292,51.0
+8,on,42639644570,Postgres tests,14.415,15.0
+8,on,42639644570,Post Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.223,0.0
+8,on,42639644570,Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.181,0.0
+8,on,42639644570,Stop containers,0.232,1.0
+8,on,42639644570,Complete job,1.968,0.0
+9,on,42639923490,Set up job,1.339,2.0
+9,on,42639923490,Initialize containers,8.13,8.0
+9,on,42639923490,Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,1.281,1.0
+9,on,42639923490,Secret check (E4),0.015,0.0
+9,on,42639923490,Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,2.353,2.0
+9,on,42639923490,Install dependencies,0.034,0.0
+9,on,42639923490,Ruff,0.057,0.0
+9,on,42639923490,Fast tests (coverage gate 85%),46.101,47.0
+9,on,42639923490,Postgres tests,13.761,13.0
+9,on,42639923490,Post Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.193,0.0
+9,on,42639923490,Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.19,1.0
+9,on,42639923490,Stop containers,0.209,0.0
+9,on,42639923490,Complete job,1.615,0.0
+10,off,42640207540,Set up job,1.033,1.0
+10,off,42640207540,Initialize containers,8.807,9.0
+10,off,42640207540,Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,1.13,1.0
+10,off,42640207540,Secret check (E4),0.019,0.0
+10,off,42640207540,Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,1.186,1.0
+10,off,42640207540,Install dependencies,0.686,1.0
+10,off,42640207540,Ruff,0.096,0.0
+10,off,42640207540,Fast tests (coverage gate 85%),55.332,55.0
+10,off,42640207540,Postgres tests,15.114,15.0
+10,off,42640207540,Post Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.111,1.0
+10,off,42640207540,Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.236,0.0
+10,off,42640207540,Stop containers,0.348,0.0
+10,off,42640207540,Complete job,1.363,0.0
+11,off,42640505318,Set up job,1.262,1.0
+11,off,42640505318,Initialize containers,6.984,7.0
+11,off,42640505318,Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,1.283,1.0
+11,off,42640505318,Secret check (E4),0.022,0.0
+11,off,42640505318,Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,1.128,2.0
+11,off,42640505318,Install dependencies,0.501,0.0
+11,off,42640505318,Ruff,0.117,0.0
+11,off,42640505318,Fast tests (coverage gate 85%),60.096,60.0
+11,off,42640505318,Postgres tests,15.533,16.0
+11,off,42640505318,Post Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.142,0.0
+11,off,42640505318,Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.283,0.0
+11,off,42640505318,Stop containers,0.256,1.0
+11,off,42640505318,Complete job,1.956,0.0
+12,on,42640840964,Set up job,0.984,1.0
+12,on,42640840964,Initialize containers,7.178,7.0
+12,on,42640840964,Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,1.202,2.0
+12,on,42640840964,Secret check (E4),0.024,0.0
+12,on,42640840964,Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,2.86,2.0
+12,on,42640840964,Install dependencies,0.061,1.0
+12,on,42640840964,Ruff,0.079,0.0
+12,on,42640840964,Fast tests (coverage gate 85%),59.388,59.0
+12,on,42640840964,Postgres tests,15.373,15.0
+12,on,42640840964,Post Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.242,1.0
+12,on,42640840964,Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.256,0.0
+12,on,42640840964,Stop containers,0.26,0.0
+12,on,42640840964,Complete job,2.397,0.0
+13,on,42641176569,Set up job,0.815,1.0
+13,on,42641176569,Initialize containers,6.171,6.0
+13,on,42641176569,Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.996,1.0
+13,on,42641176569,Secret check (E4),0.024,0.0
+13,on,42641176569,Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,1.7,2.0
+13,on,42641176569,Install dependencies,0.06,0.0
+13,on,42641176569,Ruff,0.077,0.0
+13,on,42641176569,Fast tests (coverage gate 85%),62.041,62.0
+13,on,42641176569,Postgres tests,15.856,16.0
+13,on,42641176569,Post Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.24,0.0
+13,on,42641176569,Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.273,0.0
+13,on,42641176569,Stop containers,0.26,1.0
+13,on,42641176569,Complete job,0.766,0.0
+14,off,42641524545,Set up job,1.337,1.0
+14,off,42641524545,Initialize containers,8.194,8.0
+14,off,42641524545,Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,1.317,2.0
+14,off,42641524545,Secret check (E4),0.014,0.0
+14,off,42641524545,Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.871,1.0
+14,off,42641524545,Install dependencies,0.641,0.0
+14,off,42641524545,Ruff,0.077,0.0
+14,off,42641524545,Fast tests (coverage gate 85%),43.987,44.0
+14,off,42641524545,Postgres tests,13.709,14.0
+14,off,42641524545,Post Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.127,0.0
+14,off,42641524545,Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.199,0.0
+14,off,42641524545,Stop containers,0.207,1.0
+14,off,42641524545,Complete job,6.89,0.0
+15,off,42641822162,Set up job,1.354,1.0
+15,off,42641822162,Initialize containers,8.445,8.0
+15,off,42641822162,Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,1.39,2.0
+15,off,42641822162,Secret check (E4),0.018,0.0
+15,off,42641822162,Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,1.018,1.0
+15,off,42641822162,Install dependencies,0.284,0.0
+15,off,42641822162,Ruff,0.098,0.0
+15,off,42641822162,Fast tests (coverage gate 85%),50.474,51.0
+15,off,42641822162,Postgres tests,14.391,14.0
+15,off,42641822162,Post Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.109,0.0
+15,off,42641822162,Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.209,0.0
+15,off,42641822162,Stop containers,0.245,1.0
+15,off,42641822162,Complete job,1.788,0.0
+16,on,42642506026,Set up job,0.858,1.0
+16,on,42642506026,Initialize containers,6.315,6.0
+16,on,42642506026,Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,1.042,1.0
+16,on,42642506026,Secret check (E4),0.022,0.0
+16,on,42642506026,Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,1.632,2.0
+16,on,42642506026,Install dependencies,0.05,0.0
+16,on,42642506026,Ruff,0.073,0.0
+16,on,42642506026,Fast tests (coverage gate 85%),58.297,58.0
+16,on,42642506026,Postgres tests,15.336,16.0
+16,on,42642506026,Post Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.235,0.0
+16,on,42642506026,Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.267,0.0
+16,on,42642506026,Stop containers,0.242,0.0
+16,on,42642506026,Complete job,1.125,0.0
+17,on,42642831759,Set up job,0.775,0.0
+17,on,42642831759,Initialize containers,7.821,7.0
+17,on,42642831759,Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.794,1.0
+17,on,42642831759,Secret check (E4),0.018,0.0
+17,on,42642831759,Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,1.661,2.0
+17,on,42642831759,Install dependencies,0.042,0.0
+17,on,42642831759,Ruff,0.061,0.0
+17,on,42642831759,Fast tests (coverage gate 85%),49.765,50.0
+17,on,42642831759,Postgres tests,15.262,15.0
+17,on,42642831759,Post Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.208,0.0
+17,on,42642831759,Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.209,0.0
+17,on,42642831759,Stop containers,0.264,1.0
+17,on,42642831759,Complete job,0.883,0.0
+18,off,42643636637,Set up job,1.139,1.0
+18,off,42643636637,Initialize containers,6.846,7.0
+18,off,42643636637,Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,1.477,2.0
+18,off,42643636637,Secret check (E4),0.025,0.0
+18,off,42643636637,Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.966,1.0
+18,off,42643636637,Install dependencies,0.31,0.0
+18,off,42643636637,Ruff,0.124,0.0
+18,off,42643636637,Fast tests (coverage gate 85%),59.889,60.0
+18,off,42643636637,Postgres tests,15.563,15.0
+18,off,42643636637,Post Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.137,1.0
+18,off,42643636637,Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.269,0.0
+18,off,42643636637,Stop containers,0.257,0.0
+18,off,42643636637,Complete job,2.37,0.0
+19,off,42643976905,Set up job,1.141,1.0
+19,off,42643976905,Initialize containers,7.105,7.0
+19,off,42643976905,Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,1.075,1.0
+19,off,42643976905,Secret check (E4),0.023,0.0
+19,off,42643976905,Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.908,1.0
+19,off,42643976905,Install dependencies,0.332,1.0
+19,off,42643976905,Ruff,0.116,0.0
+19,off,42643976905,Fast tests (coverage gate 85%),58.544,58.0
+19,off,42643976905,Postgres tests,15.473,16.0
+19,off,42643976905,Post Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.134,0.0
+19,off,42643976905,Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.261,0.0
+19,off,42643976905,Stop containers,0.258,0.0
+19,off,42643976905,Complete job,2.107,0.0
+20,on,42644272427,Set up job,1.093,1.0
+20,on,42644272427,Initialize containers,7.129,7.0
+20,on,42644272427,Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,1.256,2.0
+20,on,42644272427,Secret check (E4),0.023,0.0
+20,on,42644272427,Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,2.91,3.0
+20,on,42644272427,Install dependencies,0.051,0.0
+20,on,42644272427,Ruff,0.076,0.0
+20,on,42644272427,Fast tests (coverage gate 85%),60.781,61.0
+20,on,42644272427,Postgres tests,15.728,15.0
+20,on,42644272427,Post Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.243,1.0
+20,on,42644272427,Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.267,0.0
+20,on,42644272427,Stop containers,0.283,0.0
+20,on,42644272427,Complete job,2.439,0.0
+21,off,42647167954,Set up job,1.061,1.0
+21,off,42647167954,Initialize containers,6.491,6.0
+21,off,42647167954,Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,1.452,2.0
+21,off,42647167954,Secret check (E4),0.024,0.0
+21,off,42647167954,Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,1.115,1.0
+21,off,42647167954,Install dependencies,0.668,0.0
+21,off,42647167954,Ruff,0.12,1.0
+21,off,42647167954,Fast tests (coverage gate 85%),61.447,61.0
+21,off,42647167954,Postgres tests,15.65,16.0
+21,off,42647167954,Post Run astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2,0.138,0.0
+21,off,42647167954,Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1,0.279,0.0
+21,off,42647167954,Stop containers,0.262,0.0
+21,off,42647167954,Complete job,1.138,0.0

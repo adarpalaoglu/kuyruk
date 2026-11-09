@@ -3,7 +3,7 @@
 Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12 lists the slices).
 
 ## Current slice
-**Slice 14 — E4** (not started). Slice 13 done.
+**Slice 15** (not started). Slice 14 done.
 
 ## Slices
 
@@ -23,7 +23,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 | 11 | E1 | ☑ | Prediction written? ☑ (pushed first, d809ba5). 554 tests (6 on Postgres skipped locally), 99.7% coverage; 95 runs + 10 after-fix runs, 0 errors; /health p95 at 1 s wait: A 61.7 s, B50 0.87 s → 5.6 ms and B100 1.85 s → 6.0 ms after D99, C 6.4 ms |
 | 12 | E2 | ☑ | Prediction written? ☑ (pushed first, 1f92400). 596 tests (6 on Postgres skipped locally), 99.7% coverage; 70 kill runs, 0 errors. Killed at 20 of 40: broken loses 20, job stays running forever; fixed loses 0, redoes 4, recovers in 31.8 s (stuck after 30 s); heartbeat = 15 of 139 writes per job |
 | 13 | E3 | ☑ | Prediction written? ☑ (pushed first, 87b1a6a). 641 tests (6 on Postgres skipped locally), 99.7% coverage; 120 builds (Mac + GitHub Actions), 0 failed, all 5 images start. Simple → careful image: Mac 1,331 → 259 MB (5.1×), GitHub 1,220 → 207 MB (5.9×); 98% of the gap is the base image alone; one-line change rebuild 15.6 → 0.5 s (Mac) |
-| 14 | E4 | ☐ | Prediction written? ☐ |
+| 14 | E4 | ☑ | Prediction written? ☑ (pushed first, 95cf984). 675 tests (6 on Postgres skipped locally), 99.7% coverage; 21 CI runs on GitHub (20 counted, 1 failed on a flaky Slice 11 test and replaced by run 21 on the same commit). Job time cache on 90 s vs off 90 s: the cache saves nothing (download 0.4 s; restore costs 1.3 s). Secret: yes for every push, own-branch pull request, manual run and Release after a push (41 runs); Release after a manual run skipped (21/21); fork pull request not tested (documented) |
 | 15 | Extras (TR vs EN, one-command rerun) | ☐ | |
 | 16 | Interface mockup approved | ☐ | |
 | 17 | Interface build | ☐ | |
@@ -41,6 +41,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 - D95–D98 (E1) · Approved by Adar: ☑ (8 Nov 2026); D96 addition (probes from their own process) approved 8 Nov 2026; D99 (/health is async def, Adar's decision and wording) 8 Nov 2026
 - D100–D104 (E2) · Approved by Adar: ☑ (9 Nov 2026), with the review's wording changes (restart, heartbeat cost, blocking calls)
 - D105–D107 (E3) · Approved by Adar: ☑ (9 Nov 2026); D106 update (uncompressed size = sum of the layers, Mac run repeated) Adar's decision 9 Nov 2026
+- D108–D109 (E4) · Approved by Adar: ☑ (9 Nov 2026)
 - D87–D93 (real AI measurements; D88 and D93 reworded as Adar asked) and the D82 "done" note · Approved by Adar: ☑ (8 Nov 2026); D89 update (memory emptied before every run) and D91 addition approved 8 Nov 2026; D94 (10-minute heat-up) approved 8 Nov 2026
 
 ## Interface parity (fill in at slice 17)
@@ -171,6 +172,15 @@ Slice 13 (E3, limits for the README, and leftovers):
 - The GitHub run has its own manual workflow (`e3.yml`, D107); it never runs on push, so normal CI and E4 timings are unaffected.
 - Rerun: `caffeinate -dims uv run python -m bench.e3_build` (about 11 minutes, Docker Desktop open; clears Docker's build cache for every project; `--trial DIR` is one round). GitHub: `gh workflow run e3.yml`, then download the `e3-results` artifact into `bench/data/`. Charts: `uv run --group bench python -m bench.charts`.
 
+Slice 14 (E4, limits for the README, and leftovers):
+- **Key numbers** (`docs/experiments.md`; GitHub `ubuntu-24.04`, commit 95cf984): job time with uv's cache on 90 s (76–94, 10 runs), off 90 s (79–93, 10 runs). Install step 0.05 s on vs 0.48 s off (download of 43 libraries 0.42 s); setup-uv with cache restore 2.3 s vs 1.0 s without; tests 74.0 vs 74.9 s. Secret present "yes" in 6 pushes to main, 4 pushes to `slice-9`, 4 runs of PR #1, 21 manual runs, 6 Release runs after a push; Release after each of the 21 manual runs: job skipped, secret step never ran.
+- Prediction (verdict rule): "downloads everything again", "install only a few seconds", "tests the same", push/own-PR "yes", Release never runs PR code: right. "Adds 10–20 s" and "job drops by ¼–⅓": wrong (no difference). Fork "no": not tested (documented, D36).
+- **For Adar:** write "Why it happens" and "Takeaway" for E4 in `docs/experiments.md` in his own words (placeholders marked).
+- **Flaky test fixed (Adar's decision):** `tests/test_experiments.py::test_health_stays_fast_while_all_helper_threads_are_busy` failed once in 22 GitHub runs (0.134 s against its 0.1 s limit). Limit now 0.5 s, and the slow requests now hold the helper threads for 2 s instead of 0.4 s, so a plain-def /health would still fail clearly (checked: 1.93 s, fails).
+- Code review (10 findings, all fixed with Adar's approval): warm-up left out of the secrets part; 15 s pause before checking that nothing runs; reading `gh` calls tried up to 4 times; Release runs matched to pushes by commit; a step missing from the log makes the run not counted; results written to a side file that replaces the real one only at the end (shared `bench/csv_out.py`, also used by E3); E4 key numbers printed with 2 decimals; the chart says the parts' medians don't add up exactly to the job's; an unused helper removed.
+- Manual CI runs on main also start a Release run; its publish job is skipped (only a push to main publishes, D84).
+- Rerun: `uv run python -m bench.e4_ci` (about 50 minutes on GitHub; `--part cache|secrets`; `--trial DIR` is one run on and one off). Charts: `uv run --group bench python -m bench.charts`.
+
 ## Session log
 - 6 Nov 2026 — Planning finished in Claude app. Starting documents created. Tools installed. Decision log D01–D41 approved.
 - 6 Nov 2026 — Slice 0 done: uv project (Python 3.12, exact pins + `uv.lock`), folders, `app/settings.py`, `/health` + tests, `.env.example`, `.gitignore`, MIT licence, placeholder README, `ci.yml` (ruff + pytest, 85% gate).
@@ -187,3 +197,4 @@ Slice 13 (E3, limits for the README, and leftovers):
 - 8 Nov 2026 — Slice 11 done: prediction pushed first (d809ba5). Experiment addresses `/experiments/e1/…` (off by default, 404, never with demo mode; D95), `bench/e1_load.py` (fixed-clock probes from their own process, safeguards checked and recorded; D96–D98), 80 sleep runs + 15 real-AI runs, two charts, `docs/experiments.md` E1 method/results/surprises filled. D95–D98 approved. Review: fixes 1–9 done, 10 kept; /health made async def (D99) and confirmed with a short rerun.
 - 9 Nov 2026 — Slice 12 done: prediction pushed first (1f92400). Experiment address `/experiments/e2/jobs/{ticket}/run-in-api` (BackgroundTasks running the worker's own code, off by default; D100), `bench/e2_kill.py` + `bench/e2_compose.yaml` (own Compose project, real SIGKILL halfway, database read every 100 ms; D101–D104), 65 fake-AI kill runs + 3 cost jobs + 5 real-AI kill runs, two charts, `docs/experiments.md` E2 method/results/surprises filled. D100–D104 approved. Review: 9 fixes (restart wording, heartbeat cost, blocking-call note, approval status, failed-run rows, no 120 s wait without a kill, stale line from data, real-AI label, demo-only lines left out: 105 recovery lines); finding 8 (Ollama client left open) was not real: the client closes after every text.
 - 9 Nov 2026 — Slice 13 done: prediction pushed first (87b1a6a). Five E3 Dockerfiles in `docker/` (pip-slim identical to pip-good except FROM, checked by a test), `bench/e3_build.py`, manual `e3.yml` workflow, two charts, E3 write-up filled (Why/Takeaway left for Adar). D105–D107 approved; D106 updated (layer-sum size) and the Mac run repeated. Mac and GitHub runs: 120/120 builds ok.
+- 9 Nov 2026 — Slice 14 done: prediction pushed first (95cf984). `bench/e4_ci.py` (20 manual CI runs on GitHub, cache on/off interleaved, step times from log timestamps; secret lines with links), chart `e4_cache.png`, E4 write-up filled (Why/Takeaway left for Adar). D108–D109 approved. One rerun of the series after a GitHub "not found" (script now retries); secrets collection corrected (only published Release runs as "after a push", no duplicates).

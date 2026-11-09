@@ -208,3 +208,48 @@ the rest added by hand.
 | Machine | `ubuntu-24.04` runner: Linux 7.0.0-1017-azure, x86_64, 4 CPUs, 16.8 GB memory |
 | Docker | Engine 28.0.4, storage overlay2 (standard store) |
 | Results | all 60 builds worked; all 5 images started; files downloaded from the run's `e3-results` artifact as `e3_builds_ci.csv`, `e3_images_ci.csv` |
+
+## E4 — CI (Slice 14)
+
+`bench/e4_ci.py` (D108–D109), run from the Mac with `gh`; every number comes
+from GitHub's own records.
+
+| | |
+|---|---|
+| Date and time | 9 Nov 2026, 14:38–15:26 UTC (warm-up started 14:38:21, last run finished 15:25:41) |
+| Commit | `95cf984` ("E4: prediction") in every run; the script checks it |
+| Machine | GitHub's `ubuntu-24.04` runner, image version 20261101.360.1 |
+| Tools | uv 0.13.7, `astral-sh/setup-uv` v10.3.3, `actions/checkout` v7.0.1; Postgres 16.15 service container |
+| Cache | setup-uv's cache, restored from GitHub's cache storage (key from `uv.lock`), 27 MB; filled by earlier runs and by the warm-up |
+| Runs | warm-up 42636647003 (cache on, not recorded), then 20 runs, on-off-off-on × 5, each started only when no run of any workflow was going |
+| Secrets part | read with `--part secrets` after the cache part, from the recorded runs' ids |
+
+### E4 run notes (added by hand after the run)
+
+- Before the series: a trial (one run on, one off, not kept: 42634856536,
+  42635222281) to check the script reads the logs.
+- A first attempt (warm-up 42635553052, runs 42635825050 and 42636155985)
+  stopped when GitHub answered "not found" for a run it had started a moment
+  before (42636398467). The script now retries that answer for up to 2
+  minutes; the whole series (warm-up included) was run again, and the first
+  attempt's 2 runs are not used.
+- Run 2 (cache off, 42637245172) failed: the Slice 11 test
+  `test_health_stays_fast_while_all_helper_threads_are_busy` measured 0.134 s
+  where it allows 0.1 s. It is left out. At Adar's request one more
+  cache-off run was added afterwards (run 21, 42647167954, 9 Nov 2026
+  15:41 UTC), recorded only after checking it tested `95cf984` like the
+  other 19; so 10 cache-off runs count. It ran after the series, not
+  interleaved.
+- The first secrets collection also counted 5 skipped Release runs as
+  "recent Release runs after a push" (the newest Release runs were the
+  skipped ones), some twice; the script now takes only Release runs that
+  published, and writes each run once. The secrets file is from the
+  corrected collection.
+- After the code review (9 Nov 2026): the script now waits 15 s after each
+  run before checking that nothing is running (in the series, 3 skipped
+  Release runs of 1–6 s overlapped the next run's start; they used no
+  machine), tries a failed reading `gh` call up to 4 times, leaves the
+  warm-up out of the secrets part, matches Release runs to pushes by commit,
+  and writes results to a side file that replaces the real one only at the
+  end. The secrets file was collected again with it (same table; now with
+  run 21 and its Release run).

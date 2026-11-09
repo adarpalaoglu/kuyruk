@@ -46,6 +46,15 @@ exist (the Mac, and GitHub Actions with `_ci` in the name):
 And the E3 key numbers: sizes, how many times smaller, how much of the size
 gap is the base image alone (D105), and the median (min-max) build times.
 
+E4 (Slice 14, spec 9.4), from the files made by `bench/e4_ci.py`, if they
+exist:
+
+- `e4_cache.png`: CI job time with uv's cache on vs off (every run a dot,
+  the median a line), and where the time goes (median per part of the job).
+
+And the E4 key numbers: median (min-max) of the job and of each part, with
+the cache on and off, uv's own download times, and the secret checks (D109).
+
 matplotlib (the charting library) is in the separate `bench` dependency group,
 so Kuyruk itself, its tests and its Docker image don't need it. Run:
 
@@ -1009,6 +1018,174 @@ def e3_charts() -> None:
         e3_numbers(name, images, builds)
 
 
+# ---- E4 ----------------------------------------------------------------------
+
+E4_STYLE = {"on": (SERIES, "o", "cache on"), "off": (SERIES_2, "s", "cache off")}
+
+# The parts of a CI job, and which steps (by the start of their name) belong
+# to each. Steps not listed here are "the rest" (set up, checkout, clean-up).
+E4_PARTS = {
+    "Postgres start-up": ["Initialize containers"],
+    "uv setup + cache": ["Run astral-sh/setup-uv", "Post Run astral-sh/setup-uv"],
+    "Install (uv sync)": ["Install dependencies"],
+    "Tests (ruff, fast, Postgres)": ["Ruff", "Fast tests", "Postgres tests"],
+}
+E4_REST = "The rest (set up, checkout, clean-up)"
+# One colour per part of the job, in the order of E4_PARTS, then "the rest".
+E4_PART_COLOURS = ["#52514e", "#eb6834", "#eda100", "#2a78d6", "#a8a6a0"]
+
+
+def e4_part_of(step: str) -> str:
+    """Which part of the job a step belongs to."""
+    for part, starts in E4_PARTS.items():
+        if any(step.startswith(start) for start in starts):
+            return part
+    return E4_REST
+
+
+def e4_good_runs(runs: list[dict], cache: str) -> list[dict]:
+    """The recorded runs of one kind that worked and have a job time."""
+    return [
+        r
+        for r in runs
+        if r["cache"] == cache and not r.get("error") and r.get("job_s", "") != ""
+    ]
+
+
+def e4_parts(steps: list[dict], run_ids: set[str]) -> dict[str, list[float]]:
+    """{part: [seconds in each run]}, from the steps' log times."""
+    per_run: dict[str, dict[str, float]] = {}
+    for step in steps:
+        if step["run_id"] in run_ids and step["log_s"] != "":
+            part = e4_part_of(step["step"])
+            totals = per_run.setdefault(step["run_id"], {})
+            totals[part] = totals.get(part, 0.0) + float(step["log_s"])
+    parts: dict[str, list[float]] = {}
+    for totals in per_run.values():
+        for part, seconds in totals.items():
+            parts.setdefault(part, []).append(seconds)
+    return parts
+
+
+def e4_chart(runs: list[dict], steps: list[dict]) -> None:
+    """Job time cache on vs off, and where the time goes (median per part)."""
+    figure, (left, right) = plt.subplots(
+        1, 2, figsize=(12, 4.8), gridspec_kw={"width_ratios": [1, 1.6]}
+    )
+    for place, cache in enumerate(["on", "off"]):
+        colour, marker, name = E4_STYLE[cache]
+        values = [float(r["job_s"]) for r in e4_good_runs(runs, cache)]
+        if not values:
+            continue
+        offsets = [(i - (len(values) - 1) / 2) * 0.03 for i in range(len(values))]
+        left.scatter(
+            [place + o for o in offsets],
+            values,
+            color=colour,
+            marker=marker,
+            s=40,
+            edgecolor=SURFACE,
+            zorder=3,
+        )
+        middle = statistics.median(values)
+        left.plot([place - 0.25, place + 0.25], [middle, middle], color=TEXT)
+        left.annotate(
+            f"{middle:.0f} s",
+            xy=(place + 0.27, middle),
+            va="center",
+            color=TEXT,
+            fontsize=9,
+        )
+    left.set_xticks([0, 1], ["cache on", "cache off"])
+    left.set_xlim(-0.6, 1.6)
+    left.set_ylim(bottom=0)
+    style(left, "Job time (each dot is one run)", "", "Seconds")
+
+    names = [*E4_PARTS, E4_REST]
+    for place, cache in enumerate(["on", "off"]):
+        ids = {r["run_id"] for r in e4_good_runs(runs, cache)}
+        parts = e4_parts(steps, ids)
+        start = 0.0
+        for index, part in enumerate(names):
+            values = parts.get(part, [])
+            width = statistics.median(values) if values else 0.0
+            right.barh(
+                place,
+                width,
+                left=start,
+                color=E4_PART_COLOURS[index],
+                label=part if place == 0 else None,
+                height=0.55,
+            )
+            if width >= 3:
+                right.annotate(
+                    f"{width:.1f}",
+                    xy=(start + width / 2, place),
+                    ha="center",
+                    va="center",
+                    color=SURFACE,
+                    fontsize=8,
+                )
+            start += width
+    right.set_yticks([0, 1], ["cache on", "cache off"])
+    right.invert_yaxis()
+    right.legend(frameon=False, loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=2)
+    # Each part's own median is stacked, so the bar's length is close to,
+    # but not exactly, the median job time on the left.
+    style(
+        right,
+        "Where the time goes (median of each part)",
+        "Seconds (each part's median; together close to, not equal to, the job's)",
+        "",
+    )
+    figure.suptitle(
+        "CI with uv's download cache on and off", x=0.01, ha="left", color=TEXT
+    )
+    save(figure, "e4_cache.png")
+
+
+def e4_spread(values: list[float]) -> str:
+    """ "median (min-max)" with 2 decimals, for E4's sub-second steps."""
+    return f"{statistics.median(values):.2f} ({min(values):.2f}-{max(values):.2f})"
+
+
+def e4_numbers(runs: list[dict], steps: list[dict], secrets: list[dict]) -> None:
+    """Print the E4 key numbers: the job and its parts, on and off; the secrets."""
+    for cache in ["on", "off"]:
+        good = e4_good_runs(runs, cache)
+        failed = sum(1 for r in runs if r["cache"] == cache) - len(good)
+        print(
+            f"E4 cache {cache}: {len(good)} runs ({failed} not counted); job "
+            f"{median_and_spread([float(r['job_s']) for r in good]) if good else '-'} s"
+            f"; waiting for a machine "
+            f"{median_and_spread(numbers(good, 'queue_s')) if good else '-'} s"
+        )
+        parts = e4_parts(steps, {r["run_id"] for r in good})
+        for part in [*E4_PARTS, E4_REST]:
+            if parts.get(part):
+                print(f"E4 cache {cache}: {part} {e4_spread(parts[part])} s")
+        for column in ["prepared_s", "installed_s"]:
+            values = numbers(good, column)
+            if values:
+                print(f"E4 cache {cache}: uv {column} {e4_spread(values)} s")
+        results = Counter(r.get("cache_result", "") for r in good)
+        print(f"E4 cache {cache}: cache result {dict(results)}")
+    kinds = Counter((r["workflow"], r["event"], r["secret_present"]) for r in secrets)
+    for (workflow, event, present), count in sorted(kinds.items()):
+        print(f"E4 secret: {workflow} {event}: {present} ({count} runs)")
+
+
+def e4_charts() -> None:
+    """Draw the E4 chart and print its numbers, if E4 has been measured."""
+    if not (DATA / "e4_runs.csv").exists():
+        return
+    runs = read("e4_runs.csv")
+    steps = read("e4_steps.csv") if (DATA / "e4_steps.csv").exists() else []
+    secrets = read("e4_secrets.csv") if (DATA / "e4_secrets.csv").exists() else []
+    e4_chart(runs, steps)
+    e4_numbers(runs, steps, secrets)
+
+
 def main() -> None:
     """Draw all the charts and print the key numbers."""
     alone_rows = read("ollama_times.csv")
@@ -1037,6 +1214,7 @@ def main() -> None:
     e1_charts()
     e2_charts()
     e3_charts()
+    e4_charts()
     print(f"Charts written to {CHARTS}.")
 
 

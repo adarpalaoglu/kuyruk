@@ -90,3 +90,26 @@ times in seconds.
   order), `dockerfile`, `step` (`cold`: build cache cleared first; `code`:
   after a one-line change to `app/main.py`; `package`: after adding
   `six==1.17.0`), `seconds`, `ok`, `image_bytes`, `error`.
+
+## E4 — CI (Slice 14)
+
+Made by `bench/e4_ci.py` (D108–D109) from GitHub's own records of the CI
+runs; setup in `setup.md`. Every run has its link (`url`). Times in seconds.
+
+- `e4_runs.csv` — one row per recorded run (21: the 20 of the series and
+  run 21, an extra cache-off run on the same commit after run 2 failed on a
+  flaky test; the warm-up run is not recorded): `order`, `cache` (`on`/`off`), `run_id`, `url`, `commit` (the
+  same in every row), `conclusion`, `created_at`, `queue_s` (waiting for a
+  machine), `job_s` (job start → end, GitHub's whole seconds),
+  `cache_result` (`hit`, `miss`, or `off` when not used), uv's own
+  `prepared_packages`/`prepared_s` (downloading and unpacking; only when
+  something had to be downloaded) and `installed_packages`/`installed_s`,
+  `secret_line`, `error`.
+- `e4_steps.csv` — one row per step per run: `step` (GitHub's step name),
+  `log_s` (from the timestamps on the log lines: from the step's first line
+  to the next step's first line) and `api_s` (GitHub's whole-second step
+  time, kept as a cross-check).
+- `e4_secrets.csv` — one row per run whose secret check was read:
+  `workflow`, `event`, `branch`, `run_id`, `url`, `created_at`,
+  `secret_present` (`yes`, `no`, or `step not run` when the job was
+  skipped), the printed `line`, and a `note`.
