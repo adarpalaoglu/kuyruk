@@ -396,10 +396,129 @@ Rebuild after adding one package. Both versions have to reinstall, so the gap wi
 Cost of the fix. The Dockerfile will be about 3 times longer and harder to read for someone new. The main risk is forgetting to copy something into the final stage, which builds fine but breaks only when the container runs. The slim image also lacks tools like curl for debugging inside the container.
 
 ### Method
+- **Five Dockerfiles** in `docker/` (D105), all building the same Kuyruk code
+  with the same library versions:
+
+  | Dockerfile | Base image | Installer | Stages | Layer order |
+  |---|---|---|---|---|
+  | `pip-bad` (the simple way) | full `python:3.12.16-trixie` | pip | one | all files copied, then install |
+  | `pip-good` | full | pip | one | library list, install, then the code |
+  | `uv-bad` | slim `python:3.12.16-slim-trixie` | uv | two | all files copied, then install |
+  | `uv-good` (the careful way; the real `Dockerfile` without its labels) | slim | uv | two | library list, install, then the code |
+  | `pip-slim` (size only) | slim | pip | one | as pip-good |
+
+  pip installs from a list exported from `uv.lock` (exact versions), so
+  both tools install the same versions. The pip files are written the way a
+  beginner would: pip's download cache stays in the image. `pip-slim` is
+  identical to `pip-good` except for the `FROM` line (a test checks this), so
+  the size difference between them is the base image's effect alone.
+- **The build script** (`bench/e3_build.py`, D106) builds from a temporary
+  copy of the project. First each image once: its size uncompressed (the sum
+  of its layers), compressed (saved and gzipped, roughly what a download
+  costs), whether it starts and answers `/health`, whether `curl` is inside,
+  and the Dockerfile's lines without comments. Then 5 rounds, each with the
+  4 main Dockerfiles in a rotated order (interleaved). Per Dockerfile: clear
+  Docker's build cache → **cold build** → change one line of
+  `app/main.py` → **rebuild** → add one package (`six==1.17.0`) →
+  **rebuild**. The base images stay downloaded; the libraries are downloaded
+  during the build. Time = the wall-clock time of `docker build`.
+- **Two environments:** the Mac (Apple M4, Docker Desktop) and GitHub
+  Actions (`ubuntu-24.04`, x86; started by hand, D107). Setup in
+  `bench/data/setup.md`; raw data in `bench/data/e3_*.csv`; charts in
+  `docs/charts/e3_*.png`.
+
 ### Results
+All 60 builds on the Mac worked, and all 5 images started and answered
+`/health`. Sizes were the same in every round; build times within a few
+tenths of a second (spread in brackets).
+
+**Image size** (Mac; MB)
+
+| Image | Uncompressed | Compressed | Of which base image | curl inside | Dockerfile lines |
+|---|---|---|---|---|---|
+| pip-bad | 1,331 | 450 | 1,204 (90%) | yes | 11 |
+| pip-good | 1,331 | 450 | 1,204 (90%) | yes | 12 |
+| pip-slim | 286 | 95 | 159 | no | 12 |
+| uv-bad | 259 | 71 | 159 | no | 23 |
+| uv-good | 259 | 71 | 159 | no | 23 |
+| *full base alone* | *1,204* | *401* | | *yes* | |
+| *slim base alone* | *159* | *43* | | *no* | |
+
+pip-bad is **5.1×** the size of uv-good (6.3× compressed).
+
+**Where the size difference comes from** (pip-good → uv-good, 1,071 MB; rounded to whole MB)
+
+| Step | Change | Saves |
+|---|---|---|
+| pip-good → pip-slim | only the base image (full → slim) | 1,045 MB (**98%**) |
+| pip-slim → uv-good | pip → uv, one stage → two | 27 MB (2%) |
+| bad → good layer order | only the order | 0 MB |
+
+pip adds exactly 127 MB on either base; uv adds 100 MB. The 27 MB
+difference is about the size of pip's download cache left in the image
+(26 MB in `/root/.cache/pip`). The full base image holds compilers and
+tools that the slim one doesn't (gcc, make, git, curl; plus 57 MB of C
+header files and 59 MB of documentation).
+
+**Build time** (Mac; median of 5, seconds)
+
+| Dockerfile | Cold build | After a one-line code change | After adding one package |
+|---|---|---|---|
+| pip-bad | 19.9 (19.1–20.3) | 15.6 (15.1–16.1) | 14.9 (14.9–15.6) |
+| pip-good | 19.8 (19.2–20.0) | 0.5 (0.5–0.5) | 15.3 (14.7–15.7) |
+| uv-bad | 5.5 (5.5–5.5) | 2.8 (2.7–2.8) | 3.0 (3.0–3.1) |
+| uv-good | 5.5 (5.5–5.5) | 0.5 (0.5–0.5) | 3.0 (2.9–4.0) |
+
+After a code change, good layer order saved 15.1 s with pip (31×
+faster) and 2.3 s with uv (6× faster). The bad-order rebuild took as long
+as adding a package: it reinstalled every library. uv was 3.6× faster
+than pip on a cold build and 5× faster on a reinstall.
+
+**GitHub Actions:** *[to be added after the run]*
+
+**My prediction, part by part:**
+
+| Prediction | Result | Verdict |
+|---|---|---|
+| Simple image (full base, one stage) around 1–1.2 GB | 1,331 MB | Partly wrong: 11% above the top of the range |
+| … mostly because the full base ships compilers and tools Kuyruk never uses | the full base is 1,204 of the 1,331 MB (90%); it has gcc, make, git, curl | Right |
+| Optimised image (slim, multi-stage) around 200–300 MB | 259 MB | Right |
+| Roughly 4–5 times smaller | 5.1× (6.3× compressed) | Right (just above) |
+| (Adar's question: how much is the base image alone?) | 98% of the gap pip-good → uv-good; uv + two stages 2%; layer order 0% | — |
+| One-line change, simple: 30–60 s, because the install is redone | 15.6 s; the install was redone (as long as adding a package) | Reason right, time wrong (half the lower bound) |
+| One-line change, optimised: under 5 s, install layer stays cached | 0.5 s | Right |
+| Adding a package: both reinstall | both reinstalled | Right |
+| … simple 30–60 s, optimised 15–30 s | 14.9 s and 3.0 s | Wrong: both much faster, uv most of all |
+| … the gap much smaller | 5× (14.9 vs 3.0 s) instead of 31× for a code change; in seconds about the same (12 s vs 15 s) | Partly right |
+| Cost: Dockerfile about 3 times longer | 23 lines vs 11 (2.1×) | Partly right |
+| Risk: forgetting to copy something builds fine but breaks only when run | not seen: all images started; not tested by leaving a line out | Not tested |
+| The slim image lacks curl | no curl in any slim image; curl in the full ones | Right |
+
 ### Why it happens
+*[Adar writes this in his own words.]*
+
 ### Surprises
+- **The base image is almost the whole story for size.** 98% of the size
+  difference came from changing one line, `FROM`. uv and two stages saved
+  only 27 MB, most of it pip's leftover download cache.
+- **With uv, bad layer order costs little.** uv-bad reinstalled every
+  library after a one-line change, but uv reinstalls from its download cache
+  (kept between builds by the cache mount) in about 2.8 s. pip, with no such
+  cache, took about 15 s every time.
+- **pip's cold build depends on the network.** In a trial round before the
+  main runs, pip cold builds took 32 and 44 s instead of about 20 s; the uv
+  ones didn't change. In the main runs, one pip-good cold build took 29.6 s
+  (first Mac run). pip downloads every library during a cold build.
+- **Docker Desktop counts each layer twice.** Its own image size (`docker
+  image inspect`) on the Mac includes each layer unpacked plus its
+  compressed copy (uv-good: 259 + 71 = 331 MB). A first full run used that
+  figure; it was repeated with the sum of the layers (D106 update).
+- **Layer order changes no size at all.** Bad and good order gave images
+  within a few kilobytes of each other: order only decides what Docker can
+  reuse.
+
 ### Takeaway
+*[Adar writes this in his own words.]*
 
 ---
 
