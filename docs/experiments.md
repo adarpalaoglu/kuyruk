@@ -711,3 +711,13 @@ be loosened (D84).
 
 ### Takeaway
 *[Adar writes this in his own words.]*
+
+---
+
+## Extra: Turkish vs English token cost
+
+### Question
+For the same review, how many more tokens does Turkish need than English, with Kuyruk's budget tokenizer (`o200k_base`) and with Gemma's own tokenizer?
+
+### Prediction
+Cost prediction (Adar, 9 Nov 2026, before running): Turkish needs more tokens than English for the same review, about 30–60% more with Kuyruk's tokenizer, because Turkish builds long words from many endings, and tokenizers are trained mostly on English, so they split Turkish words into more pieces. With Gemma's tokenizer, which is built for many languages, the gap is smaller but still there.
