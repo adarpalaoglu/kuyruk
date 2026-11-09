@@ -6,6 +6,20 @@ experiment runs (spec 9, general protocol) and is never edited afterwards.
 Raw data: `bench/data/`. Charts: `docs/charts/`. Setup notes:
 `bench/data/setup.md`.
 
+**How predictions are judged** (Adar's rule, 9 Nov 2026; applied to E1–E3):
+- **Right** = inside my predicted range (or the stated outcome happened) on
+  every machine measured.
+- **Partly right** = inside on one machine, or outside by no more than 25%,
+  or the direction was right but the size wasn't.
+- **Wrong** = outside by more than 25%, or the opposite of what happened.
+
+How it is applied: "outside by X%" is measured from the nearest edge of the
+range (a single number counts as a range of one). Where an experiment
+measured several settings (e.g. E1's wait times), each setting counts like
+a machine. Where the prediction gave numbers, the percentage decides; "the
+direction was right but the size wasn't" is for predictions that gave no
+numbers. Parts that were not measured are marked "Not tested".
+
 ---
 
 ## E1 — Blocking the event loop
@@ -111,12 +125,12 @@ its median, apart from C's few-millisecond values.
 | Prediction | Result | Verdict |
 |---|---|---|
 | A: /health gets stuck; seconds instead of milliseconds | p50 15.8–162 s | Right |
-| A: p95 could take tens of seconds; the waits pile up | p95 26 s at 0.5 s, 62 s at 1 s, 132 s at 2 s, 252 s at 4 s: tens to hundreds of seconds | Right, and worse than predicted |
-| B: /health stays fast (milliseconds) | p50 stays fast (7–11 ms), but p95 is 0.4–3.6 s, about 0.9 × the wait. The async ping stays 5–8 ms | Partly wrong |
+| A: p95 could take tens of seconds; the waits pile up | p95 26 s at 0.5 s, 62 s at 1 s, 132 s at 2 s, 252 s at 4 s: tens to hundreds of seconds | Partly right: inside at 0.5 and 1 s; 33% and 155% above "tens of seconds" (up to 99 s) at 2 and 4 s |
+| B: /health stays fast (milliseconds) | p50 stays fast (7–11 ms), but p95 is 0.4–3.6 s, about 0.9 × the wait. The async ping stays 5–8 ms | Partly right: milliseconds (under 1 s) at 0.5 and 1 s (p95 0.41 and 0.87 s); seconds at 2 and 4 s |
 | B: ~40 threads; with 50 slow requests, 10 wait and take about twice as long | at 1 s: 40 done at 1.1 s, the other 10 at 2.1 s (same pattern at every wait) | Right |
 | C: /health stays in milliseconds | p95 6.4–6.9 ms at every wait | Right |
 | C: all 50 finish in about one wait time | last done = wait + 0.1 s at every wait | Right |
-| Best: C; B fine until the threads run out; A freezes everything | C best at every wait. A froze everything, including the slow requests' own answers (see Surprises). B100 (threads run out): 3 waits, /health p95 ≈ 1.85 × the wait. But B already hurt /health's p95 at 50 requests | Mostly right |
+| Best: C; B fine until the threads run out; A freezes everything | C best at every wait. A froze everything, including the slow requests' own answers (see Surprises). B100 (threads run out): 3 waits, /health p95 ≈ 1.85 × the wait. But B already hurt /health's p95 at 50 requests | Partly right: C and A as stated; B not fine at 50 |
 | (real AI, not predicted separately) | A froze /health for the whole job (p95 13.5 s); B and C kept it at 6 ms. All three took the same ~13.5–13.9 s for the 10 texts | — |
 
 ### Why it happens
@@ -429,8 +443,10 @@ Cost of the fix. The Dockerfile will be about 3 times longer and harder to read 
 
 ### Results
 All 60 builds worked on each machine (120 in all), and all 5 images
-started and answered `/health` on both. Sizes were the same in every round; build times within a few
-tenths of a second (spread in brackets).
+started and answered `/health` on both. Spread in brackets (fastest–slowest
+of the 5 rounds): at most 1.3 s on the Mac and 3.4 s on GitHub (both pip-bad
+cold builds), mostly a few tenths. Each image's size was the same in every
+round on the Mac and within 182 bytes on GitHub.
 
 **Image size** (Mac; MB)
 
@@ -495,25 +511,30 @@ gap pip-good → uv-good, 990 MB (**98%**) is the base image alone and 23 MB
 | uv-bad | 4.4 (4.1–4.7) | 3.5 (3.0–3.8) | 3.8 (3.3–3.9) |
 | uv-good | 4.3 (4.2–4.7) | 0.9 (0.7–1.0) | 3.3 (3.0–4.0) |
 
-Same order as on the Mac. pip was about twice as fast here (GitHub's
-network is fast), so the gaps are smaller: good layer order made a code
-change 6.6× faster with pip and 3.9× with uv.
+Same order as on the Mac, except that pip-bad's and pip-good's cold builds
+swapped places (9.7 vs 10.2 s; within each other's spread). Builds that
+install with pip were 1.5–2.1× faster here, but the cached rebuilds were
+slower (pip-good 1.4 vs 0.5 s, uv-good 0.9 vs 0.5 s). The cause was not
+measured: the two machines differ in network, chip (x86 vs ARM), CPU count
+and Docker version. Good layer order made a code change 6.8× faster with
+pip and 3.9× with uv.
 
 **My prediction, part by part:**
 
 | Prediction | Result | Verdict |
 |---|---|---|
-| Simple image (full base, one stage) around 1–1.2 GB | Mac 1,331 MB; GitHub 1,220 MB | Partly wrong: above the range on both (11% and 2%) |
+| Simple image (full base, one stage) around 1–1.2 GB | Mac 1,331 MB; GitHub 1,220 MB | Partly right: above the range on both, by 11% and 2% |
 | … mostly because the full base ships compilers and tools Kuyruk never uses | the full base is 90–91% of the simple image (Mac 1,204 of 1,331 MB); it has gcc, make, git, curl | Right |
 | Optimised image (slim, multi-stage) around 200–300 MB | Mac 259 MB; GitHub 207 MB | Right |
-| Roughly 4–5 times smaller | Mac 5.1×, GitHub 5.9× (compressed 6.3× and 6.5×) | Mostly right (somewhat above) |
+| Roughly 4–5 times smaller | Mac 5.1×, GitHub 5.9× (compressed 6.3× and 6.5×) | Partly right: above the range by 3% (Mac) and 18% (GitHub) |
 | (Adar's question: how much is the base image alone?) | 98% of the gap pip-good → uv-good on both; uv + two stages 2%; layer order 0% | — |
-| One-line change, simple: 30–60 s, because the install is redone | Mac 15.6 s, GitHub 9.2 s; the install was redone (as long as adding a package) | Reason right, time wrong (well below the range) |
+| One-line change, simple: 30–60 s | Mac 15.6 s, GitHub 9.2 s | Wrong: 48% and 69% below the range |
+| … because the code is copied before the install, so the install is redone | the install was redone: the rebuild took as long as adding a package | Right |
 | One-line change, optimised: under 5 s, install layer stays cached | Mac 0.5 s, GitHub 0.9 s | Right |
 | Adding a package: both reinstall | both reinstalled | Right |
-| … simple 30–60 s, optimised 15–30 s | Mac 14.9 s and 3.0 s; GitHub 9.6 s and 3.3 s | Wrong: both much faster, uv most of all |
-| … the gap much smaller | as a ratio yes: Mac 5× instead of 31× for a code change, GitHub 2.9× instead of 6.6×; in seconds about the same (Mac 12 s vs 15 s) | Partly right |
-| Cost: Dockerfile about 3 times longer | 23 lines vs 11 (2.1×) | Partly right |
+| … simple 30–60 s, optimised 15–30 s | Mac 14.9 s and 3.0 s; GitHub 9.6 s and 3.3 s | Wrong: 50% and 80% below (Mac), 68% and 78% below (GitHub) |
+| … the gap much smaller | simple (pip-bad) vs optimised (uv-good): as a ratio much smaller, Mac 5.1× instead of 34× for a code change, GitHub 2.9× instead of 10×; in seconds only a little smaller, Mac 12 s instead of 15 s, GitHub 6 s instead of 8 s | Partly right: direction right, size not |
+| Cost: Dockerfile about 3 times longer | 23 lines vs 11 (2.1×) | Wrong: 30% below |
 | Risk: forgetting to copy something builds fine but breaks only when run | not seen: all images started; not tested by leaving a line out | Not tested |
 | The slim image lacks curl | no curl in any slim image; curl in the full ones | Right |
 
