@@ -925,16 +925,18 @@ def e3_time_chart(environments: list[tuple[str, list[dict]]]) -> None:
                 middle = statistics.median(values)
                 axes.bar(place, middle, color=SERIES, width=0.6)
                 axes.scatter([place] * len(values), values, color=TEXT, s=10, zorder=3)
+                # The median written just right of the bar's top, so a slow
+                # round's dot far above doesn't pull the label away from it.
                 axes.annotate(
                     f"{middle:.1f} s",
-                    xy=(place, max(values)),
-                    xytext=(0, 4),
-                    textcoords="offset points",
-                    ha="center",
+                    xy=(place + 0.31, middle),
+                    va="center",
                     color=TEXT,
                     fontsize=9,
                 )
             axes.set_xticks(range(len(E3_MAIN)), E3_MAIN)
+            # Room right of the last bar for its label.
+            axes.set_xlim(-0.5, len(E3_MAIN) - 0.1)
             style(axes, f"{name}: {title}", "", "Seconds")
     figure.suptitle(
         "Build time (bar: median of the rounds; dots: each build)",

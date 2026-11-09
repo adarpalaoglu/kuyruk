@@ -164,3 +164,31 @@ Written automatically by `bench/e2_kill.py` when the run started.
 - Before the full run, one trial (1 broken + 1 fixed, not kept) gave the
   same counts: broken 20 lost, never recovered; fixed 0 lost, 4 redone,
   recovery 31.6 s.
+
+## E3 — image size and rebuild time (Slice 13)
+
+Mac run (`bench/e3_build.py`, D105–D107). Machine lines printed by the script;
+the rest added by hand.
+
+| | |
+|---|---|
+| Date and time | 9 Nov 2026, 15:59–16:10 (+03:00) |
+| Mac | MacBook Air (Mac16,12), Apple M4, 24 GB; macOS 15.7.3; on AC power |
+| Docker | Docker Desktop, Engine 29.9.2; its Linux VM: aarch64, 10 CPUs, 8.3 GB memory; containerd image store (sizes as `docker image inspect` reports them) |
+| Kuyruk commit | `f0bef90` (Slice 13 code) |
+| Base images | `python:3.12.16-trixie` (full) and `python:3.12.16-slim-trixie`, both pinned by digest; pip 25.0.1 as shipped in them; uv 0.13.7 |
+| Extra package | `six==1.17.0` |
+| Rounds | 5, interleaved (rotated order); build cache cleared (`docker builder prune -af`) before every cold build; base images downloaded once before the run |
+| Network | home Wi-Fi; libraries downloaded from PyPI during cold builds and pip rebuilds |
+| Other apps | Docker Desktop open (needed); other heavy apps closed |
+
+### E3 run notes (added by hand after the run)
+
+- All 60 builds worked; all 5 images started and answered `/health`.
+- Before the full run, one trial round (not kept) gave the same sizes to
+  within 0.01 MB, and the same uv times, but slower pip cold builds (32 and
+  44 s instead of ~19 s): pip downloads every library during a cold build, so
+  its time depends on the network; uv's did not change.
+- A separate check before the full run: a cold uv-good build after
+  `docker builder prune -af` downloaded all 35 libraries ("Prepared 35
+  packages"), so a cold build really starts from nothing.
