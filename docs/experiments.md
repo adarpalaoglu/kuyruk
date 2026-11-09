@@ -18,7 +18,8 @@ range (a single number counts as a range of one). Where an experiment
 measured several settings (e.g. E1's wait times), each setting counts like
 a machine. Where the prediction gave numbers, the percentage decides; "the
 direction was right but the size wasn't" is for predictions that gave no
-numbers. Parts that were not measured are marked "Not tested".
+numbers. Parts that were not measured are marked "Not tested". (These
+readings approved by Adar, 9 Nov 2026.)
 
 ---
 
