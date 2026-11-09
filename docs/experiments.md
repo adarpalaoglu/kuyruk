@@ -574,7 +574,11 @@ pip and 3.9× with uv.
 ## E4 — CI
 
 ### Question
+How much time does uv's download cache save in a CI run, and which kinds of runs (push, pull request from my own branch or from a fork, manual run, release) can see a repository secret?
+
 ### Prediction
+E4 prediction (Adar, 9 Nov 2026, before running): (a) Cache: With the cache off, every run must download all the libraries again, adding about 10–20 seconds to the job. With it on, installing takes only a few seconds. The total job time drops by about a quarter to a third. The tests themselves take the same time either way. (b) Secrets: A push to main and a pull request from my own branch both get the secret ("yes"). A pull request from a fork gets "no", because GitHub hides secrets from code written by outsiders. The release workflow has the secret but never runs pull-request code, so it can't leak it.
+
 ### Method
 ### Results
 ### Why it happens
