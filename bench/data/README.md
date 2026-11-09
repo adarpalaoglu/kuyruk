@@ -70,3 +70,22 @@ run's time zero, when all slow requests were sent.
   (time to its full answer), `ok`, `error`.
 - `e1_slow.csv` — every slow request (5,150): `index`, `finished`,
   `server_seconds`, `ok`, `error`.
+
+## E3 — image size and rebuild time (Slice 13)
+
+Made by `bench/e3_build.py` (D105–D107); setup in `setup.md`. Files without a
+suffix were measured on the Mac; files ending in `_ci` on GitHub's
+`ubuntu-24.04` machine (`.github/workflows/e3.yml`). Sizes are in bytes,
+times in seconds.
+
+- `e3_images.csv` / `e3_images_ci.csv` — one row per image (5 Dockerfiles
+  and the 2 base images on their own, `base-full` and `base-slim`):
+  `image_bytes` (size on disk, uncompressed), `compressed_bytes` (the image
+  saved with `docker save` and gzipped), `starts` (the image started Kuyruk's
+  API and `/health` answered), `has_curl`, `lines` (the Dockerfile's lines
+  without comments or blank lines; empty for base images).
+- `e3_builds.csv` / `e3_builds_ci.csv` — one row per build (5 rounds × 4
+  Dockerfiles × 3 steps): `round`, `position` (place in the round's rotated
+  order), `dockerfile`, `step` (`cold`: build cache cleared first; `code`:
+  after a one-line change to `app/main.py`; `package`: after adding
+  `six==1.17.0`), `seconds`, `ok`, `image_bytes`, `error`.

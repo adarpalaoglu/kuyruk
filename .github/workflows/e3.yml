@@ -1,0 +1,47 @@
+# GitHub Actions workflow for experiment E3 (D107): the same image-size and
+# rebuild-time measurements as on the Mac (bench/e3_build.py), on GitHub's own
+# Linux computer, as E3's second environment. It runs only when started by
+# hand (`gh workflow run e3.yml`, or the "Run workflow" button on GitHub's
+# Actions page), never on a push or pull request: the 5 rounds take a long
+# time and would slow down normal CI and skew E4, which times CI runs. The
+# results are offered as a download ("artifact") named e3-results, which is
+# then committed as bench/data/e3_builds_ci.csv and e3_images_ci.csv.
+name: E3 builds
+
+on:
+  workflow_dispatch:
+
+# Read-only access to the repository: this workflow never needs to change it.
+permissions:
+  contents: read
+
+jobs:
+  e3:
+    # An exact machine image, the same as ci.yml.
+    runs-on: ubuntu-24.04
+    # A safety limit: a stuck run is stopped instead of using up minutes.
+    timeout-minutes: 120
+
+    steps:
+      # Actions are pinned to a fixed commit (the long hex code) rather than a
+      # movable tag, so nobody can change what runs here behind our back.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # uv, the same version as on the Mac. The script uses it to make pip's
+      # library list from uv.lock and to add the extra package.
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+
+      - name: Measure the E3 images and builds
+        run: uv run python -m bench.e3_build --environment ci
+
+      # Keep the two CSV files as a download on the run's page.
+      - name: Upload the results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e3-results
+          path: |
+            bench/data/e3_builds_ci.csv
+            bench/data/e3_images_ci.csv

@@ -35,6 +35,17 @@ exist:
 
 And the E2 key numbers per setting, and the cost of the fix (D104).
 
+E3 (Slice 13, spec 9.3), from the files made by `bench/e3_build.py`, if they
+exist (the Mac, and GitHub Actions with `_ci` in the name):
+
+- `e3_image_size.png`: each image's size, split into its base image and what
+  the Dockerfile adds on top;
+- `e3_build_time.png`: cold build, rebuild after a one-line code change and
+  rebuild after adding one package, per Dockerfile.
+
+And the E3 key numbers: sizes, how many times smaller, how much of the size
+gap is the base image alone (D105), and the median (min-max) build times.
+
 matplotlib (the charting library) is in the separate `bench` dependency group,
 so Kuyruk itself, its tests and its Docker image don't need it. Run:
 
@@ -817,6 +828,185 @@ def e2_charts() -> None:
     e2_numbers(runs, cost, code)
 
 
+# ---- E3 ----------------------------------------------------------------------
+
+# The E3 Dockerfiles in the order shown, and which base image each starts from.
+E3_IMAGES = ["pip-bad", "pip-good", "pip-slim", "uv-bad", "uv-good"]
+E3_MAIN = ["pip-bad", "pip-good", "uv-bad", "uv-good"]
+E3_BASE = {
+    "pip-bad": "base-full",
+    "pip-good": "base-full",
+    "pip-slim": "base-slim",
+    "uv-bad": "base-slim",
+    "uv-good": "base-slim",
+}
+E3_STEPS = {
+    "cold": "Cold build (cache cleared)",
+    "code": "After a one-line code change",
+    "package": "After adding one package",
+}
+# The two environments, in the order shown, with their file suffix (D107).
+E3_ENVIRONMENTS = [("Mac", ""), ("GitHub Actions", "_ci")]
+MB = 1_000_000  # Docker counts sizes in decimal megabytes
+
+
+def e3_sizes(images: list[dict]) -> dict[str, float]:
+    """{image: uncompressed size in MB} for the images that were measured."""
+    return {
+        r["image"]: float(r["image_bytes"]) / MB for r in images if r["image_bytes"]
+    }
+
+
+def e3_size_chart(environments: list[tuple[str, list[dict]]]) -> None:
+    """Image size per Dockerfile, split into "base image" and "added on top".
+
+    One panel per environment. The darker part of each bar is the base image
+    the Dockerfile starts from; the lighter part is what the Dockerfile adds.
+    """
+    figure, panels = plt.subplots(
+        1, len(environments), figsize=(6 * len(environments), 4.5), squeeze=False
+    )
+    for axes, (name, images) in zip(panels[0], environments, strict=True):
+        sizes = e3_sizes(images)
+        shown = [i for i in E3_IMAGES if i in sizes]
+        places = range(len(shown))
+        base = [min(sizes.get(E3_BASE[i], 0.0), sizes[i]) for i in shown]
+        added = [sizes[i] - b for i, b in zip(shown, base, strict=True)]
+        axes.barh(places, base, color=SERIES, label="base image")
+        axes.barh(places, added, left=base, color=SERIES_2, label="added on top")
+        for place, image in zip(places, shown, strict=True):
+            axes.annotate(
+                f"{sizes[image]:,.0f} MB",
+                xy=(sizes[image], place),
+                xytext=(4, 0),
+                textcoords="offset points",
+                va="center",
+                color=TEXT,
+                fontsize=9,
+            )
+        axes.set_yticks(list(places), shown)
+        axes.invert_yaxis()  # the simple version on top
+        axes.set_xlim(0, max(sizes.values(), default=1) * 1.25)
+        axes.legend(frameon=False, loc="lower right")
+        style(axes, name, "Size on disk (MB, uncompressed)", "")
+    figure.suptitle("Image size per Dockerfile", x=0.01, ha="left", color=TEXT)
+    save(figure, "e3_image_size.png")
+
+
+def e3_times(builds: list[dict]) -> dict[tuple[str, str], list[float]]:
+    """{(Dockerfile, step): [seconds of each build that worked]}."""
+    times: dict[tuple[str, str], list[float]] = {}
+    for row in builds:
+        if row["ok"] == "yes":
+            times.setdefault((row["dockerfile"], row["step"]), []).append(
+                float(row["seconds"])
+            )
+    return times
+
+
+def e3_time_chart(environments: list[tuple[str, list[dict]]]) -> None:
+    """Build times: one panel per step, one row per environment.
+
+    Each build is a small dot; the bar is the median of the rounds.
+    """
+    figure, panels = plt.subplots(
+        len(environments),
+        len(E3_STEPS),
+        figsize=(13, 4 * len(environments)),
+        squeeze=False,
+    )
+    for row_panels, (name, builds) in zip(panels, environments, strict=True):
+        times = e3_times(builds)
+        for axes, (step, title) in zip(row_panels, E3_STEPS.items(), strict=True):
+            for place, image in enumerate(E3_MAIN):
+                values = times.get((image, step), [])
+                if not values:
+                    continue
+                middle = statistics.median(values)
+                axes.bar(place, middle, color=SERIES, width=0.6)
+                axes.scatter([place] * len(values), values, color=TEXT, s=10, zorder=3)
+                axes.annotate(
+                    f"{middle:.1f} s",
+                    xy=(place, max(values)),
+                    xytext=(0, 4),
+                    textcoords="offset points",
+                    ha="center",
+                    color=TEXT,
+                    fontsize=9,
+                )
+            axes.set_xticks(range(len(E3_MAIN)), E3_MAIN)
+            style(axes, f"{name}: {title}", "", "Seconds")
+    figure.suptitle(
+        "Build time (bar: median of the rounds; dots: each build)",
+        x=0.01,
+        ha="left",
+        color=TEXT,
+    )
+    save(figure, "e3_build_time.png")
+
+
+def e3_numbers(name: str, images: list[dict], builds: list[dict]) -> None:
+    """Print the E3 key numbers for one environment.
+
+    Sizes, how many times smaller, and how the size gap splits (D105):
+    pip-good → pip-slim is the base image alone (only the FROM line differs);
+    pip-slim → uv-good is uv plus two stages.
+    """
+    sizes = e3_sizes(images)
+    for row in images:
+        size = sizes.get(row["image"])
+        packed = row.get("compressed_bytes") or ""
+        print(
+            f"E3 {name} image {row['image']}: "
+            + (f"{size:,.0f} MB" if size is not None else "not measured")
+            + (f", {float(packed) / MB:,.0f} MB compressed" if packed else "")
+            + f"; starts {row.get('starts') or '-'}; curl {row.get('has_curl') or '-'}"
+            + (f"; {row['lines']} lines" if row.get("lines") else "")
+        )
+    needed = {"pip-bad", "pip-good", "pip-slim", "uv-good"}
+    if needed <= sizes.keys():
+        print(
+            f"E3 {name}: pip-bad is {sizes['pip-bad'] / sizes['uv-good']:.1f}x "
+            f"the size of uv-good"
+        )
+        gap = sizes["pip-good"] - sizes["uv-good"]
+        base_part = sizes["pip-good"] - sizes["pip-slim"]
+        rest = sizes["pip-slim"] - sizes["uv-good"]
+        if gap > 0:
+            print(
+                f"E3 {name}: of the {gap:,.0f} MB gap pip-good -> uv-good, "
+                f"{base_part:,.0f} MB ({base_part / gap:.0%}) is the base image "
+                f"alone and {rest:,.0f} MB ({rest / gap:.0%}) is uv + two stages"
+            )
+    times = e3_times(builds)
+    for image in E3_MAIN:
+        # "-" for a step with no build that worked.
+        parts = [
+            f"{step} {median_and_spread(times[image, step])} s"
+            if (image, step) in times
+            else f"{step} -"
+            for step in E3_STEPS
+        ]
+        failed = sum(1 for r in builds if r["dockerfile"] == image and r["ok"] != "yes")
+        print(f"E3 {name} {image}: " + "; ".join(parts) + f"; failed {failed}")
+
+
+def e3_charts() -> None:
+    """Draw the E3 charts and print its numbers, for each measured environment."""
+    measured = []
+    for name, suffix in E3_ENVIRONMENTS:
+        images_file = DATA / f"e3_images{suffix}.csv"
+        builds_file = DATA / f"e3_builds{suffix}.csv"
+        if images_file.exists() and builds_file.exists():
+            measured.append((name, read(images_file.name), read(builds_file.name)))
+    if not measured:
+        return
+    e3_size_chart([(name, images) for name, images, _ in measured])
+    e3_time_chart([(name, builds) for name, _, builds in measured])
+    for name, images, builds in measured:
+        e3_numbers(name, images, builds)
+
+
 def main() -> None:
     """Draw all the charts and print the key numbers."""
     alone_rows = read("ollama_times.csv")
@@ -844,6 +1034,7 @@ def main() -> None:
     print("It", stops_getting_faster(medians) + ".")
     e1_charts()
     e2_charts()
+    e3_charts()
     print(f"Charts written to {CHARTS}.")
 
 
