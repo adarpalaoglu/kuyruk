@@ -561,6 +561,21 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 - **Why:** the database's own counters count every write, including ones a guess would miss; counting from the repo makes the number reproducible.
 - **Date:** 9 Nov 2026 · **Status:** Approved by Adar (9 Nov 2026)
 
+### D105 — What E3 compares
+- **Decision:** the spec's 2×2 (naive pip vs multi-stage uv slim × bad vs good layer order) as four Dockerfiles in `docker/`: `pip-bad`, `pip-good`, `uv-bad`, `uv-good`. The pip versions use the full `python:3.12.16-trixie` base image and one stage; the uv versions use the slim base and two stages, like the real `Dockerfile` (`uv-good` matches it). Bad order = all the code copied before the libraries are installed; good order = the library list first, the code after. pip installs from a list exported from `uv.lock` (exact versions, no hashes), so both tools install the same versions and only the tool changes. The pip versions are written the way a beginner would: no clean-up of pip's download cache, which stays in the image. One extra, size only: `pip-slim`, identical to `pip-good` in every line except the `FROM` line (checked by a test), so pip-bad/pip-good → pip-slim is the base image's effect alone, and pip-slim → uv-good is the effect of uv plus two stages. Beyond the spec, also timed: a rebuild after adding one package.
+- **Why:** the simple versions change three things at once (base, tool, stages); pip-slim splits out the base image. The added-package rebuild checks the third part of Adar's prediction. Exporting from the lock keeps every version pinned.
+- **Date:** 9 Nov 2026 · **Status:** Approved by Adar (9 Nov 2026)
+
+### D106 — How E3 measures
+- **Decision:** `bench/e3_build.py` builds from a temporary copy of the project (the repo is never changed). Per Dockerfile, one round: clear Docker's build cache (`docker builder prune -af`; base images stay downloaded) → **cold build** → change one line of Kuyruk's code → **rebuild** → add one small pinned package → **rebuild**. Times are the wall-clock time of the `docker build` command on the machine's own clock. 5 rounds, each with the Dockerfiles in a rotated order (interleaved); median and spread reported. Recorded per image: uncompressed size (`docker image inspect`) and compressed size (the image's layers gzipped, roughly what a download costs); the two base images' own sizes; whether the image starts and loads Kuyruk; whether `curl` is inside; and each Dockerfile's lines without comments or blank lines. `pip-slim` is built once per environment, size only.
+- **Why:** clearing the cache before each cold build makes every cold build start alike; keeping the base images downloaded keeps their download time (network noise) out, while library downloads, a real part of a build, stay in. The run check tests the "builds fine but breaks when run" risk.
+- **Date:** 9 Nov 2026 · **Status:** Approved by Adar (9 Nov 2026)
+
+### D107 — E3's second environment: a manual GitHub workflow
+- **Decision:** `.github/workflows/e3.yml` runs the same script on GitHub's `ubuntu-24.04` machine, only when started by hand (`workflow_dispatch`), and offers the CSV as a download; it is then committed as `bench/data/e3_builds_ci.csv`. It never runs on push or pull request.
+- **Why:** 5 rounds of 4 Dockerfiles × 3 builds would make every CI run much longer, and would skew E4, which times CI runs. GitHub's machine is x86 (Intel/AMD), not Apple's chip, so sizes may differ slightly; the write-up says so.
+- **Date:** 9 Nov 2026 · **Status:** Approved by Adar (9 Nov 2026)
+
 ---
 
 ## Presentation
