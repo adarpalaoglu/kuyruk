@@ -167,10 +167,215 @@ ever finish, and what does the fix cost?
 E2 prediction (Adar, 8 Nov 2026, before running): Broken (BackgroundTasks inside the API): When the API is killed halfway through a job, the job stays "running" forever, even after the API restarts, because nothing remembers that it was in progress. Every text not finished at the kill is lost (about half the job), and the user waits forever. Fixed (separate worker + recovery): When the worker is killed halfway, no text is lost. Another worker (or the restarted one) notices the job is stuck once the heartbeat has been silent for the stale time, and continues from the first waiting text. Up to 4 texts are done twice: the ones that were with the AI at the moment of the kill. Recovery takes about the stale time (30 s) plus a second or two. Cost of the fix: a separate program and some extra database writes (a heartbeat every 5 s), which is small compared with losing work.
 
 ### Method
+- **The broken version** (D100): an experiment-only address,
+  `POST /experiments/e2/jobs/{ticket}/run-in-api`, which exists only with
+  `EXPERIMENTS_ENABLED=true` and never in demo mode (same rules as D95). It
+  marks one of your queued jobs as running and hands it to FastAPI
+  `BackgroundTasks`, which runs it inside the API process after the reply is
+  sent. The texts are done by the worker's own code (`Worker.process_job`),
+  so they are processed exactly as in the fixed version: 4 at once, same
+  retries, same "text started" log line. In broken runs no worker runs, so
+  nothing ever looks for stuck jobs. One more difference: the worker's
+  database calls are short blocking calls, which inside the API run on its
+  event loop and briefly hold up other requests (the E1 mistake). It changes
+  nothing that E2 counts (lost, redone, recovery), and `/health` answered
+  after every restart. Because the broken version reuses the worker's code,
+  it also writes a heartbeat every 5 s, which nothing ever reads.
+- **The fixed version:** Kuyruk's separate worker with crash recovery as
+  built in Slice 8 (heartbeat every 5 s, a job is stuck once its heartbeat
+  has been silent for 30 s, takeover by compare-and-swap; D68–D76).
+- **The kill script** (`bench/e2_kill.py`, D101): everything runs in Docker
+  Compose under its own project name (`kuyruk-e2`, own database), with
+  production timings. One run: empty the tables, sign up, send a 40-text job
+  (the fake AI replays the measured 4-at-once times of Slice 10, median
+  7.2 s per text), and read the job straight from the database every 100 ms.
+  When 20 of the 40 texts are finished, the program doing the job (the API in
+  broken runs, the worker in fixed runs) is killed with a real SIGKILL
+  (`docker kill`). Then the script starts the same container again. The
+  worker has a restart rule in `compose.yaml`, but Docker's restart rule
+  ignores a container stopped with `docker kill`, because it treats that as a
+  manual stop, so the script restarting the worker is the correct simulation
+  of a real crash restart. The API has no restart rule, so after a real crash
+  it would stay down; restarting it gave the broken version its best chance,
+  and the job still never continued. (The script first waits 2 s to see
+  whether Docker restarted the container itself; it never did. That is why
+  "restart" takes about 2.1 s.)
+- **Per run:** **lost** = texts not finished at the end, whatever their
+  state; **redone** = texts started twice (same job and position in two
+  "text started" log lines, D75); **recovery time** = kill → first text
+  finished after the kill, also split into kill → takeover and takeover →
+  first text; whether the job reaches done; crash count; whether `/health`
+  answers after the restart. All times on the Mac's one clock.
+- **Runs** (D102), each repeat in its own shuffled order: main, broken vs
+  fixed, replayed times, 5 repeats each, broken watched 5 minutes after the
+  restart; sensitivity, broken vs fixed at fixed waits of 0.5 / 1 / 2 / 4 s
+  per text, 5 repeats each, broken watched 60 s; stale-time check, fixed
+  only, "stuck after" 10 / 30 / 60 s, 5 repeats each (65 runs). Real-AI
+  check (D103): fixed only, real Gemma on Ollama, a 12-text job killed at 6
+  of 12, 5 repeats, after a 10-minute heat-up with Ollama's memory emptied
+  and 3 warm-ups before every run.
+- **Cost of the fix** (D104): 3 uninterrupted 40-text jobs; database writes
+  from Postgres's own counters (`pg_stat_user_tables`: `n_tup_ins` +
+  `n_tup_upd` + `n_tup_del`), read before and after each job; heartbeat
+  writes = `jobs` updates − one per finished text − 2 (claim and done).
+  Lines of code counted by the script from the repo, without comments,
+  blank lines or docstrings, and without the demo-only lines in `beat` (the
+  demo crash button's check, D74), which belong to demo mode, not to the
+  fix.
+- **Safeguards:** 0 errors in all 70 runs. Clock check: 1 database look in
+  70 runs left more than 20 ms late (36 ms, in a 60 s stale-time run, where
+  recovery took 62 s). The same 40 texts in the same order every run.
+- Mac, versions and the full setup: `bench/data/setup.md` (9 Nov 2026,
+  MacBook Air M4, plugged in, Docker Desktop open). Data:
+  `bench/data/e2_runs.csv`, `e2_cost.csv`, `e2_code.csv`. Charts:
+  `docs/charts/e2_lost_redone.png`, `docs/charts/e2_recovery.png`.
+
 ### Results
+Every group of 5 repeats gave the same counts in every run, and times
+within 0.2 s of each other (spread in brackets; real AI within 1 s).
+
+**What is lost, and does the job finish?** (killed at 20 of 40 finished)
+
+| Version | Runs | Lost | Redone | Job at the end | Recovery time |
+|---|---|---|---|---|---|
+| Broken (BackgroundTasks in the API) | 25 | 20 of 40 in every run | 0 | still "running" in every run (watched 5 min in 5 runs, 60 s in 20) | never |
+| Fixed (worker + recovery), replayed times | 25 | 0 | 4 in every run | done in every run | 31.8 s (31.7–31.8) |
+| Fixed, real AI (12 texts, killed at 6) | 5 | 0 | 4 in every run | done in every run | 26.2 s (26.2–27.2) |
+
+In the broken runs, 24 texts were started: the 20 finished ones and the 4
+that were with the AI at the kill. Those 4 were never started again. After
+the restart `/health` answered normally in every run, so the API looked
+healthy while the job stood still. Crash count stayed 0: nothing noticed the
+crash.
+
+**Recovery time vs wait per text** (fixed, stuck after 30 s; median of 5)
+
+| Wait per text | Kill → takeover | Takeover → first text | Recovery | Job done after the kill |
+|---|---|---|---|---|
+| 0.5 s | 27.8 s | 0.5 s | 28.4 s (28.3–28.4) | 30.5 s |
+| 1 s | 29.9 s | 1.0 s | 30.9 s (30.9–30.9) | 35.0 s |
+| 2 s | 29.9 s | 2.0 s | 31.9 s (31.8–32.0) | 40.0 s |
+| 4 s | 29.9 s | 4.0 s | 33.9 s (33.9–34.0) | 50.0 s |
+| replayed (median 7.2 s) | 25.9 s | 5.9 s | 31.8 s (31.7–31.8) | 65.0 s |
+| real AI | 25.9 s | 0.3 s | 26.2 s (26.2–27.2) | 33.6 s |
+
+**Recovery time vs stale time** (fixed, replayed times; median of 5)
+
+| Stuck after | Kill → takeover | Recovery | Redone |
+|---|---|---|---|
+| 10 s | 6.6 s | 12.5 s (12.4–12.5) | 4 |
+| 30 s | 25.9 s | 31.7 s (31.7–31.8) | 4 |
+| 60 s | 56.2 s | 62.0 s (61.9–62.1) | 4 |
+
+**Cost of the fix**
+
+| | |
+|---|---|
+| Database writes for one uninterrupted 40-text job (75.8 s) | 139 (same in all 3 jobs) |
+| of which heartbeat | 15 (10.8%), exactly one per 5 s of running |
+| Worker (`app/worker.py`), lines of code | 462 |
+| of which crash recovery (takeover, heartbeat, hand back; demo-only lines left out) | 105 |
+
+The heartbeat's writes are the cost compared with a plain BackgroundTasks
+job, which has no heartbeat. (E2's broken version also writes one, because
+it reuses the worker's code, D100; there nothing ever reads it.) Plus one
+more program to run: the worker's container.
+
+**My prediction, part by part:**
+
+| Prediction | Result | Verdict |
+|---|---|---|
+| Broken: the job stays "running" forever, even after the API restarts | "running" in all 25 runs, still after 5 minutes; crash count 0 | Right |
+| Broken: every text not finished at the kill is lost (about half) | exactly 20 of 40 lost in every run, including the 4 that were with the AI | Right |
+| Broken: the user waits forever | the job never moves again; `/health` says the API is fine | Right |
+| Fixed: no text is lost | 0 lost in all 30 fixed runs (25 fake AI, 5 real AI) | Right |
+| Fixed: the restarted worker notices the job once the heartbeat has been silent for the stale time, and continues from the first waiting text | takeover in every run; crash count 1; the job finished with all texts done | Right |
+| Fixed: up to 4 texts done twice, the ones with the AI at the kill | exactly 4 in every run | Right (always the full 4) |
+| Recovery: about the stale time (30 s) plus a second or two | 26.2–34.0 s. Takeover came 25.9–29.9 s after the kill, sometimes before 30 s; then the first text took one AI wait (0.3–5.9 s) | Partly right |
+| Cost: a separate program and some extra database writes (heartbeat every 5 s), small compared with losing work | one more container; 15 of 139 writes (10.8%) per job compared with a job with no heartbeat; 105 lines of recovery code | Right |
+
 ### Why it happens
+<!-- draft: Adar to rewrite in his own words -->
+- **Broken: the job's progress lives only in the API process.**
+  BackgroundTasks runs the job inside the API, after the reply is sent. A
+  SIGKILL ends that process with no clean-up, so the database still says
+  "running". The restarted API is a new process with no memory of the job,
+  and nothing is responsible for checking for stuck jobs. So the job never
+  continues: 20 of 40 texts lost in all 25 broken runs.
+- **Why `/health` said fine:** it only checks that the API answers, not that
+  work is moving. A green health check is not proof that jobs are making
+  progress.
+- **Fixed: progress lives in the database.** Each finished text is saved
+  straight away, and the worker writes a heartbeat every 5 s. Once a job's
+  heartbeat is older than the stuck-after time, a worker takes it over and
+  continues from the saved texts: 0 lost in all 30 fixed runs.
+- **Why exactly 4 texts are redone:** 4 texts run at once, and a text in
+  progress is not saved. So all 4 texts that were with the AI are lost at
+  the kill and done again.
+- **Why recovery took 26–34 s:** the countdown starts at the last heartbeat,
+  which was 0–5 s before the kill. Then up to 1 s until the worker's next
+  stuck-job check, then one text's AI wait. The stale-time check confirms
+  it: stuck after 10 / 30 / 60 s gave recovery of 12.5 / 31.7 / 62.0 s, about
+  the stuck-after time plus 2 s.
+
 ### Surprises
+- **Recovery can be shorter than the stale time.** "Stuck" is counted from
+  the last heartbeat, not from the kill. The heartbeat comes every 5 s, so at
+  the kill the last one was already 0–5 s old. With the replayed times it was
+  about 4 s old, so the takeover came 25.9 s after the kill; at waits of
+  1–4 s it was just fresh (29.9 s). The worker also looks for jobs only once
+  a second, which adds up to 1 s. So kill → takeover is between the stale
+  time minus 5 s and the stale time plus 1 s, and then one text's AI wait
+  comes on top.
+- **The spread is tiny.** In each group of 5 the kill → takeover times agree
+  within 0.2 s, because the kill always comes at the same point of the same
+  job with the same timings, so it meets the heartbeat at the same moment. A
+  kill at a random moment would spread over that 6-second window.
+- **Real AI recovered fastest** (26.2 s): its takeover came early (25.9 s),
+  and the first texts done after it happened to be two very short reviews
+  (26 and 59 characters, 0.3–0.5 s each).
+- **The redone texts are always 4, never fewer.** With 4 texts at once and a
+  job far from its end, 4 texts are always with the AI when the kill comes.
+  Fewer only near the end of a job.
+- **The stale time sets the recovery time almost one to one** (10 → 12.5 s,
+  30 → 31.7 s, 60 → 62.0 s), and changes nothing else: still 0 lost and 4
+  redone. A shorter stale time means a faster recovery, but leaves less
+  room for a living worker whose heartbeat is late (for example a busy
+  database or a paused container) before it looks stuck. Kuyruk uses 30 s,
+  six heartbeats (D68).
+
 ### Takeaway
+<!-- draft: Adar to rewrite in his own words -->
+- **The rule:** don't run long jobs inside the web server. Use a separate
+  worker, save progress after each item, and add a heartbeat so another
+  worker can take over a stuck job.
+- **What the fix costs:** one extra container; 15 of 139 database writes
+  per job (10.8%), compared with a plain BackgroundTasks job with no
+  heartbeat; 105 of the worker's 462 lines of code.
+- **Work can run twice:** after a crash, up to as many items as run at once
+  are redone (4 here, in every run). With a paid AI service that would mean
+  up to 4 extra paid calls per crash (not tested in E2). Every item must be
+  safe to redo.
+- **Choosing the stuck-after time:** shorter recovers faster (recovery ≈
+  stuck-after + about 2 s). But keep it several heartbeats long, so a worker
+  that is alive but briefly slow doesn't lose its job to another worker (not
+  tested in E2). 30 s with a 5 s heartbeat is a reasonable default.
+- **Monitoring:** watch for jobs stuck in "running", not just `/health`.
+  In E2 the broken job stood still for 5 minutes while `/health` stayed
+  fine.
+
+**Note (not built or measured): 4 uvicorn workers with BackgroundTasks.**
+Running the API as 4 uvicorn worker processes (`--workers 4`) doesn't fix
+this. Each process runs its own background tasks, so a job lives in
+whichever process took the request. If one process dies, only its jobs are
+lost and the other 3 keep answering. uvicorn starts a new process in its
+place, but the new process doesn't know those jobs existed, so they stay
+"running" exactly as in E2. A restart of the whole API (for example a new
+release) stops all 4 at once, and a polite stop can only wait so long for
+background tasks before Docker kills the process. More processes make the problem smaller per
+crash and harder to notice, but nothing would ever finish the lost texts.
+That needs something outside the request that remembers the job in the
+database and checks it is still alive: the worker and its heartbeat.
 
 ---
 

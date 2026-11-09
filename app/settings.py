@@ -179,10 +179,12 @@ class Settings(BaseSettings):
     # (D74). Off by default: outside demo mode that address answers 404.
     demo_mode: bool = False
 
-    # Experiment E1 (spec 9.1, D95). When true, the experiment-only addresses
-    # under /experiments/e1/ are switched on: a slow step written the wrong
-    # and the right way, to measure how much a wrong one freezes the API. Off
-    # by default (404), and never allowed together with demo mode. The slow
+    # Experiments E1 and E2 (spec 9.1, 9.2, D95). When true, the
+    # experiment-only addresses are switched on: under /experiments/e1/ a slow
+    # step written the wrong and the right way, to measure how much a wrong
+    # one freezes the API; under /experiments/e2/ a job run inside the API
+    # with BackgroundTasks, to measure what a kill loses (D100). Off by
+    # default (404), and never allowed together with demo mode. E1's slow
     # step may wait at most E1_MAX_WAIT_SECONDS, so nobody can freeze the API
     # for long by accident.
     experiments_enabled: bool = False

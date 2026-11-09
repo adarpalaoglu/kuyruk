@@ -1,0 +1,4 @@
+repeat,texts,job_s,jobs_inserts,jobs_updates,items_inserts,items_updates,all_writes,heartbeat_writes,heartbeats_expected,heartbeat_share
+1,40,75.8,1,57,40,40,139,15,15,0.108
+2,40,75.7,1,57,40,40,139,15,15,0.108
+3,40,75.8,1,57,40,40,139,15,15,0.108

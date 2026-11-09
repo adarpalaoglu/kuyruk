@@ -3,7 +3,7 @@
 Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12 lists the slices).
 
 ## Current slice
-**Slice 12 — E2** (not started). Slice 11 done.
+**Slice 13 — E3** (not started). Slice 12 done.
 
 ## Slices
 
@@ -21,7 +21,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 | 9 | Docker, compose, release workflow | ☑ | 466 tests (6 on Postgres), 99.7% coverage (fast suite); clean-machine check 19/19 PASS; image 328 MB (71 MB compressed); CI + release green, image public on GHCR |
 | 10 | Measure the real AI | ☑ | 491 tests (6 on Postgres), 99.7% coverage (fast suite); 100 synthetic reviews measured on real Gemma, warm Mac: 1.78 s median per text alone; 1/2/4/8 at once all ≈ 182 s for 100 texts (no speed-up) |
 | 11 | E1 | ☑ | Prediction written? ☑ (pushed first, d809ba5). 554 tests (6 on Postgres skipped locally), 99.7% coverage; 95 runs + 10 after-fix runs, 0 errors; /health p95 at 1 s wait: A 61.7 s, B50 0.87 s → 5.6 ms and B100 1.85 s → 6.0 ms after D99, C 6.4 ms |
-| 12 | E2 | ☐ | Prediction written? ☐ |
+| 12 | E2 | ☑ | Prediction written? ☑ (pushed first, 1f92400). 596 tests (6 on Postgres skipped locally), 99.7% coverage; 70 kill runs, 0 errors. Killed at 20 of 40: broken loses 20, job stays running forever; fixed loses 0, redoes 4, recovers in 31.8 s (stuck after 30 s); heartbeat = 15 of 139 writes per job |
 | 13 | E3 | ☐ | Prediction written? ☐ |
 | 14 | E4 | ☐ | Prediction written? ☐ |
 | 15 | Extras (TR vs EN, one-command rerun) | ☐ | |
@@ -39,6 +39,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 - D76 (polite stop hands the job back) and the D55 / D70 wording updates, from the Slice 8 code review · Approved by Adar: ☑ (7 Nov 2026)
 - D77–D86 (Docker, demo mode, CI, release) and the D55 note (compose sets 12 s) · Approved by Adar: ☑ (7 Nov 2026)
 - D95–D98 (E1) · Approved by Adar: ☑ (8 Nov 2026); D96 addition (probes from their own process) approved 8 Nov 2026; D99 (/health is async def, Adar's decision and wording) 8 Nov 2026
+- D100–D104 (E2) · Approved by Adar: ☑ (9 Nov 2026), with the review's wording changes (restart, heartbeat cost, blocking calls)
 - D87–D93 (real AI measurements; D88 and D93 reworded as Adar asked) and the D82 "done" note · Approved by Adar: ☑ (8 Nov 2026); D89 update (memory emptied before every run) and D91 addition approved 8 Nov 2026; D94 (10-minute heat-up) approved 8 Nov 2026
 
 ## Interface parity (fill in at slice 17)
@@ -151,6 +152,15 @@ Slice 11 (E1, limits for the README, and leftovers):
 - `OllamaAI.chat_request` now builds the request body (no change in behaviour), so the E1 blocking client sends exactly Kuyruk's request.
 - Rerun: `caffeinate -dims uv run python -m bench.e1_load` (about 65 minutes; `--sleep-only` / `--ai-only` redo one part; `--trial DIR` is a 2-minute check). Charts: `uv run --group bench python -m bench.charts`.
 
+Slice 12 (E2, limits for the README, and leftovers):
+- **Key numbers** (Docker Compose, heartbeat 5 s, stuck after 30 s, 40-text job killed at 20 finished; `docs/experiments.md`): broken (BackgroundTasks in the API) lost 20 of 40 in all 25 runs, the job stayed "running" (watched up to 5 minutes), crash count 0, /health fine. Fixed (worker + recovery) lost 0 in all 30 runs, redid exactly 4, finished every time; recovery (kill → first text finished) 28.4 / 30.9 / 31.9 / 33.9 s at waits of 0.5 / 1 / 2 / 4 s, 31.8 s with replayed times, 26.2 s with real AI (12 texts, killed at 6). Stuck after 10 / 30 / 60 s → recovery 12.5 / 31.7 / 62.0 s, still 0 lost and 4 redone. Cost: 139 writes per uninterrupted 40-text job, 15 (10.8%) from the heartbeat (compared with a plain BackgroundTasks job with no heartbeat); 105 of the worker's 462 lines are crash recovery (demo-only lines left out).
+- Prediction: right on every part except recovery time, which was partly right: 26–34 s, not "30 s plus a second or two". Takeover comes stale time − (0–5 s since the last heartbeat) + (up to 1 s until the worker looks); then one AI wait.
+- **For Adar:** rewrite the drafted "Why it happens" and "Takeaway" for E2 in `docs/experiments.md` in his own words (each marked `<!-- draft: Adar to rewrite in his own words -->`).
+- Docker's restart rule ignores a container stopped with `docker kill` (a manual stop), so the script restarts the worker, as a crash restart would. The API has no restart rule, so after a real crash it would stay down; restarting it gave the broken version its best chance (D101).
+- Note in the write-up (not built): 4 uvicorn workers with BackgroundTasks lose fewer jobs per crash but still never finish them.
+- Flaky Slice 11 test fixed (own commit): `test_probes_leave_on_the_clock_while_nothing_answers` checked real probe lateness (< 20 ms) and failed about 1 run in 6 under coverage. The pretend server now stays frozen until it has received 6 rounds of probes, so no clock is involved; breaking the load test on purpose makes it fail. 20 full runs in a row passed.
+- Rerun: `caffeinate -dims uv run python -m bench.e2_kill` (about 2 h 10 min, Docker Desktop open; `--part main|stale|sensitivity|cost|ai` redoes one part; `--trial DIR` is a short check). Charts: `uv run --group bench python -m bench.charts`.
+
 ## Session log
 - 6 Nov 2026 — Planning finished in Claude app. Starting documents created. Tools installed. Decision log D01–D41 approved.
 - 6 Nov 2026 — Slice 0 done: uv project (Python 3.12, exact pins + `uv.lock`), folders, `app/settings.py`, `/health` + tests, `.env.example`, `.gitignore`, MIT licence, placeholder README, `ci.yml` (ruff + pytest, 85% gate).
@@ -165,3 +175,4 @@ Slice 11 (E1, limits for the README, and leftovers):
 - 7 Nov 2026 — Slice 9 done: production `Dockerfile` (two stages, uv 0.13.7 and python 3.12.16-slim pinned by digest, non-root user, OCI labels), `.dockerignore`, compose with api/worker/db, healthchecks (worker: alive file), demo mode by default with demo-only secrets (refused outside demo mode), 12 s stop grace, `ci.yml` with a Postgres service and the E4 secret check, `release.yml` (workflow_run after CI on main, GHCR), double-send test on Postgres, `scripts/clean_machine_check.py` (19/19 PASS). D77–D86 approved. Review: no fixed image name, `latest` only for the newest commit (D85 updated); flaky Slice 7 pass-expiry test fixed.
 - 8 Nov 2026 — Slice 10 done: 100 synthetic Turkish reviews (`bench/data/reviews_tr.csv`), `bench/measure_ollama.py` (setup check and notes, memory emptied and 3 warm-ups before every run, one at a time, 1/2/4/8 at once × 3 interleaved, Kuyruk's own `prepare_for_ai` and `OllamaAI`), `bench/charts.py` (3 charts in `docs/charts/`), fake AI replays the 4-at-once times by default, placeholder deleted. Findings: one request at a time (MLX engine), prefix cache, Mac slows when warm (one-at-a-time redone after a 10-minute heat-up; cool run kept). D87–D94 approved. Review: three small fixes in the measuring script.
 - 8 Nov 2026 — Slice 11 done: prediction pushed first (d809ba5). Experiment addresses `/experiments/e1/…` (off by default, 404, never with demo mode; D95), `bench/e1_load.py` (fixed-clock probes from their own process, safeguards checked and recorded; D96–D98), 80 sleep runs + 15 real-AI runs, two charts, `docs/experiments.md` E1 method/results/surprises filled. D95–D98 approved. Review: fixes 1–9 done, 10 kept; /health made async def (D99) and confirmed with a short rerun.
+- 9 Nov 2026 — Slice 12 done: prediction pushed first (1f92400). Experiment address `/experiments/e2/jobs/{ticket}/run-in-api` (BackgroundTasks running the worker's own code, off by default; D100), `bench/e2_kill.py` + `bench/e2_compose.yaml` (own Compose project, real SIGKILL halfway, database read every 100 ms; D101–D104), 65 fake-AI kill runs + 3 cost jobs + 5 real-AI kill runs, two charts, `docs/experiments.md` E2 method/results/surprises filled. D100–D104 approved. Review: 9 fixes (restart wording, heartbeat cost, blocking-call note, approval status, failed-run rows, no 120 s wait without a kill, stale line from data, real-AI label, demo-only lines left out: 105 recovery lines); finding 8 (Ollama client left open) was not real: the client closes after every text.

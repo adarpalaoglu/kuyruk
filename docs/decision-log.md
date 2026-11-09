@@ -533,6 +533,36 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 
 ---
 
+## Experiment E2 (Slice 12)
+
+### D100 — The broken version is the worker's own code, run by BackgroundTasks inside the API
+- **Decision:** an experiment-only address (`POST /experiments/e2/jobs/{ticket}/run-in-api`, same rules as D95) claims one of your queued jobs for the API and hands it to FastAPI `BackgroundTasks`. The texts are done by the worker's own code (`Worker.process_job`), so they are processed exactly as in the fixed version (4 at once, same retries, same "text started" line). In broken runs no worker runs, so nothing ever looks for stuck jobs.
+- **Why:** the two things that matter for E2 differ between broken and fixed: where the job runs (inside the API, so it dies with the API) and whether anything recovers it. Any other difference (e.g. a simpler loop) could be blamed for the result instead.
+- **Side effects, written down:** the worker's database calls are short blocking calls; inside the API they run on its event loop and briefly hold up other requests (the E1 mistake). This changes nothing E2 counts (lost, redone, recovery), and `/health` answered after every restart. The broken version also writes the worker's heartbeat every 5 s, which nothing reads.
+- **Date:** 9 Nov 2026 · **Status:** Approved by Adar (9 Nov 2026)
+
+### D101 — What E2 measures and how
+- **Decision:** a 40-text `llm` job; when 20 texts are finished, the program doing it (the API in broken runs, the worker in fixed runs) is killed with a real SIGKILL (`docker kill`), and the same container is then started by the script (`docker start`). The worker has a restart rule in `compose.yaml`, but Docker's restart rule ignores a container stopped with `docker kill`, because it treats that as a manual stop, so the script restarting the worker is the correct simulation of a real crash restart. The API has no restart rule, so after a real crash it would stay down; restarting it gives the broken version its best chance. A 2 s check first records it if Docker restarted the container anyway. The script reads the job straight from the database every 100 ms on a fixed clock, from the Mac, and uses only the Mac's clock for times. **Lost** = texts not finished (not ok or failed) at the end, whatever their state. **Redone** = extra starts of the same job and position in the "text started" log lines (D75). **Recovery time** = kill → first text finished after it (also split into kill → takeover and takeover → first text). Also recorded: restart time, final state, crash count, /health after the restart, and every look more than 20 ms late.
+- **Why:** reading the database (not the API) keeps watching while the API is dead; one clock avoids mixing the Mac's and the database's times; a SIGKILL can't be caught, so no clean-up runs, like a power cut.
+- **Date:** 9 Nov 2026 · **Status:** Approved by Adar (9 Nov 2026)
+
+### D102 — E2 runs
+- **Decision:** own Compose project (`kuyruk-e2`, `bench/e2_compose.yaml`), tables emptied and the worker stopped before every run. Main: broken vs fixed, fake AI replaying the measured 4-at-once times, heartbeat 5 s, stale 30 s, 5 repeats each, interleaved; broken watched 5 minutes after the restart. Sensitivity: fixed waits of 0.5 / 1 / 2 / 4 s per text, broken vs fixed, 5 repeats each, interleaved; broken watched 60 s after the restart. Stale-time check: fixed only, "stuck after" 10 / 30 / 60 s (heartbeat 5 s), replayed times, 5 repeats each, interleaved; recovery time and redone texts.
+- **Why:** same protocol as spec 9. The 5-minute watch in the main runs shows the broken job never finishes; repeating it 20 more times in the sensitivity runs would add ~80 minutes and show nothing new.
+- **Date:** 9 Nov 2026 · **Status:** Approved by Adar (9 Nov 2026)
+
+### D103 — E2 real-AI check: 12 texts, killed at 6, warm Mac
+- **Decision:** fixed version only, real Ollama, a 12-text job killed when 6 of 12 texts are finished, 5 repeats; a 10-minute heat-up first (D94), Ollama's memory emptied and 3 warm-ups before every run (D89); the same 12 texts every run.
+- **Why:** Ollama answers one at a time (D88), so a 40-text job would take minutes per run without showing anything new. Shown as marked points on the charts.
+- **Date:** 9 Nov 2026 · **Status:** Approved by Adar (9 Nov 2026)
+
+### D104 — How the cost of the fix is counted
+- **Decision:** database writes: Postgres's own counters in `pg_stat_user_tables`, `n_tup_upd` (rows updated) plus `n_tup_ins` (rows inserted) and `n_tup_del` (rows deleted), for every table, read before and after each of 3 uninterrupted 40-text jobs (12 s after the writes, as Postgres saves the counters shortly after). Heartbeat writes = `jobs` updates − one per finished text − 2 (claim and done), checked against job time ÷ 5 s; they are the cost compared with a plain BackgroundTasks job, which has no heartbeat (E2's broken version writes one too only because it reuses the worker's code, D100). Code: lines of code without comments, blank lines or docstrings, counted by the script from `app/worker.py` (all of it, and its recovery parts `take_over_stuck_job`, `heartbeat`, `beat`, `hand_back`, without the demo-only lines in `beat`, the demo crash button's check, D74). The broken version's own file is not counted: it runs the worker's code, so its few lines would understate it.
+- **Why:** the database's own counters count every write, including ones a guess would miss; counting from the repo makes the number reproducible.
+- **Date:** 9 Nov 2026 · **Status:** Approved by Adar (9 Nov 2026)
+
+---
+
 ## Presentation
 
 ### D38 — A full, professional web interface, equal to /docs

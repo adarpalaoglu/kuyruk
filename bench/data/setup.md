@@ -127,3 +127,40 @@ Written automatically by `bench/e1_load.py` when the run started.
 | Rest between runs | 2 s; new clients every run |
 | Warm-up | 3 rounds of 5 slow requests per mode (0.05 s) and 20 of each probe, not recorded |
 | Other apps | Docker Desktop closed; other heavy apps closed |
+
+## E2 — losing work (Slice 12)
+
+Written automatically by `bench/e2_kill.py` when the run started.
+
+| | |
+|---|---|
+| Date and time | 2026-11-09T12:07:39+03:00 |
+| Mac | MacBook Air (Mac16,12), Apple M4, 24 GB |
+| macOS | 15.7.3 |
+| Power | Now drawing from 'AC Power' |
+| Docker Engine, Compose | 29.9.2, 5.6.1 |
+| Kuyruk commit | `1f924001d5eaa978c6ea89a6b4eba602b025e896` plus uncommitted Slice 12 work |
+| Parts | main, stale, sensitivity, cost, ai |
+| Compose | project `kuyruk-e2`, `compose.yaml` + `bench/e2_compose.yaml`; own database, emptied before every run; no `.env` values |
+| Worker settings | heartbeat 5 s, stuck after 30 s (stale part: 10, 30, 60 s), 4 texts at once, looks for jobs every 1 s |
+| Job | 40 texts, killed at 20 finished (real AI: 12, killed at 6) |
+| Kill | `docker kill --signal KILL` (API in broken runs, worker in fixed runs); then the script starts the same container again (`docker start`). Docker's restart rule ignores a container stopped with `docker kill`, because it treats that as a manual stop, so the script restarting the worker is the correct simulation of a real crash restart. The API has no restart rule, so after a real crash it would stay down; restarting it gave the broken version its best chance. The script first waits 2 s to see whether Docker restarted it itself (it never did) |
+| Watch | the database every 100 ms on a fixed clock, from this Mac; warning if a look leaves > 20 ms late |
+| Broken watched after restart | 300 s (main), 60 s (sensitivity) |
+| Other apps | Docker Desktop open (needed); other heavy apps closed |
+| Ollama version, model | 0.40.15, gemma4:e4b (digest `eb2177adf7646d15faead94fdad6d3e170dc8015653418a3b7d5d52a6380be5b`) |
+| Ollama parallel setting | 8 (D88) |
+| AI part | heat-up 600 s (D94); memory emptied and 3 warm-ups before every run (D89) |
+
+### E2 run notes (added by hand after the run)
+
+- One full run, 12:07–14:18 on 9 Nov 2026: 65 fake-AI kill runs (main,
+  stale-time check, sensitivity), 3 uninterrupted cost jobs, then a 600 s
+  heat-up (500 texts, not recorded) and 5 real-AI kill runs. 0 errors in all
+  70 runs; every kill restart was done by the script (2.1–2.2 s).
+- Clock check: 1 database look in 70 runs left more than 20 ms late (36.1 ms,
+  stale 60 s, repeat 4, in a run whose recovery took 62 s). Every other look
+  left within 14 ms.
+- Before the full run, one trial (1 broken + 1 fixed, not kept) gave the
+  same counts: broken 20 lost, never recovered; fixed 0 lost, 4 redone,
+  recovery 31.6 s.

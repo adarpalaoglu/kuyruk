@@ -7,7 +7,8 @@ tables exist on startup, and puts the pieces together:
 - the routes: sign-up and log-in (`app/auth.py`), jobs (`app/jobs.py`),
   live progress (`app/events.py`), the budget (`app/budget.py`) and the
   demo-mode crash button (`app/demo.py`) and the experiment-only addresses
-  of E1 (`app/experiments.py`, off by default);
+  of E1 (`app/experiments.py`) and E2 (`app/experiments_e2.py`), both off by
+  default;
 - the shared error shape for every error reply (`app/errors.py`);
 - the middleware that runs around every request (`app/middleware.py`):
   request ID, timing log, crash safety and the request size limit.
@@ -26,6 +27,7 @@ from app.demo import router as demo_router
 from app.errors import install_error_handlers
 from app.events import router as events_router
 from app.experiments import router as experiments_router
+from app.experiments_e2 import router as experiments_e2_router
 from app.jobs import router as jobs_router
 from app.middleware import BodySizeLimitMiddleware, RequestIdMiddleware
 from app.settings import settings
@@ -60,10 +62,12 @@ app.include_router(jobs_router)
 app.include_router(events_router)
 app.include_router(budget_router)
 app.include_router(demo_router)
-# Experiment E1's addresses are added only when switched on (D95); otherwise
-# they are not part of Kuyruk at all, so every request to them is a 404.
+# The experiments' addresses (E1, E2) are added only when switched on (D95);
+# otherwise they are not part of Kuyruk at all, so every request to them is a
+# 404.
 if settings.experiments_enabled:
     app.include_router(experiments_router)
+    app.include_router(experiments_e2_router)
 install_error_handlers(app)
 
 # Middleware added later wraps the one added earlier, so the request-ID

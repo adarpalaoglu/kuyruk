@@ -24,6 +24,17 @@ exist:
 And the E1 key numbers: per setting and wait, the median (and min-max) of the
 5 runs (D97).
 
+E2 (Slice 12, spec 9.2), from the files made by `bench/e2_kill.py`, if they
+exist:
+
+- `e2_lost_redone.png`: texts lost and texts done twice per run, broken vs
+  fixed (and the real-AI check);
+- `e2_recovery.png`: recovery time (kill -> first text finished after it)
+  against the wait per text and against the stale time; broken runs shown
+  as "never".
+
+And the E2 key numbers per setting, and the cost of the fix (D104).
+
 matplotlib (the charting library) is in the separate `bench` dependency group,
 so Kuyruk itself, its tests and its Docker image don't need it. Run:
 
@@ -32,6 +43,7 @@ so Kuyruk itself, its tests and its Docker image don't need it. Run:
 
 import csv
 import statistics
+from collections import Counter
 from itertools import zip_longest
 from pathlib import Path
 
@@ -528,6 +540,283 @@ def e1_charts() -> None:
         e1_numbers(after_fix)
 
 
+# ---- E2 ---------------------------------------------------------------------
+
+# Broken and fixed: one fixed colour and marker shape each (the shape also
+# tells them apart without colour). The real-AI check gets its own marker.
+E2_STYLE = {
+    "broken": ("#eb6834", "o", "Broken: BackgroundTasks inside the API"),
+    "fixed": ("#2a78d6", "s", "Fixed: separate worker + recovery"),
+}
+E2_AI_STYLE = ("#1baf7a", "D", "Fixed, real AI (12 texts)")
+
+
+def numbers(rows: list[dict], column: str) -> list[float]:
+    """The values of one column that were measured (blank = never happened)."""
+    return [float(r[column]) for r in rows if r.get(column, "") != ""]
+
+
+def kill_runs(runs: list[dict], **match: str) -> list[dict]:
+    """The kill runs that measured something (no error) and match `match`."""
+    return [
+        r
+        for r in runs
+        if not r.get("error") and all(r.get(k) == v for k, v in match.items())
+    ]
+
+
+def e2_lost_redone_chart(runs: list[dict]) -> None:
+    """Lost and redone texts per run, broken vs fixed (main runs, real AI).
+
+    Every run is one dot, spread a little sideways so equal values don't
+    hide each other; the short line is the median of the runs.
+    """
+    figure, panels = plt.subplots(1, 2, figsize=(10, 5), sharey=False)
+    groups = [
+        ("Broken", kill_runs(runs, part="main", kind="broken"), E2_STYLE["broken"]),
+        ("Fixed", kill_runs(runs, part="main", kind="fixed"), E2_STYLE["fixed"]),
+        ("Fixed, real AI", kill_runs(runs, part="ai", kind="fixed"), E2_AI_STYLE),
+    ]
+    for axes, column, title in zip(
+        panels,
+        ["lost", "redone"],
+        ["Texts lost (never finished)", "Texts done twice"],
+        strict=True,
+    ):
+        for place, (_, rows, (colour, marker, _)) in enumerate(groups):
+            values = numbers(rows, column)
+            if not values:
+                continue
+            offsets = [(i - (len(values) - 1) / 2) * 0.06 for i in range(len(values))]
+            axes.scatter(
+                [place + o for o in offsets],
+                values,
+                color=colour,
+                marker=marker,
+                s=45,
+                edgecolor=SURFACE,
+                zorder=3,
+            )
+            middle = statistics.median(values)
+            axes.plot([place - 0.25, place + 0.25], [middle, middle], color=TEXT)
+            axes.annotate(
+                f"{middle:g}",
+                xy=(place + 0.27, middle),
+                va="center",
+                color=TEXT,
+                fontsize=9,
+            )
+        axes.set_xticks(range(len(groups)), [g[0] for g in groups])
+        axes.set_xlim(-0.6, len(groups) - 0.4)
+        axes.set_ylim(bottom=-0.5)
+        style(axes, title, "", "Texts")
+    figure.suptitle(
+        "Killed halfway: what is lost and what is redone (each dot is one run)",
+        x=0.01,
+        ha="left",
+        color=TEXT,
+    )
+    save(figure, "e2_lost_redone.png")
+
+
+def e2_recovery_chart(runs: list[dict], replay_median: float) -> None:
+    """Recovery time (kill -> first text finished after it), fixed runs.
+
+    Left: against the wait per text (sensitivity runs at fixed waits, the
+    main runs at the replayed times' median, real-AI points marked); broken
+    runs never recover, drawn as a band at the top. Right: against the
+    stale time ("stuck after"). Dot = median of the runs, bar = min-max.
+    """
+    figure, (left, right) = plt.subplots(1, 2, figsize=(11, 5))
+    colour, marker, name = E2_STYLE["fixed"]
+    points = []
+    for wait in ["0.5", "1", "2", "4"]:
+        values = numbers(
+            kill_runs(runs, part="sensitivity", kind="fixed", wait=wait), "recovery_s"
+        )
+        if values:
+            points.append((float(wait), values))
+    main_values = numbers(kill_runs(runs, part="main", kind="fixed"), "recovery_s")
+    if main_values:
+        points.append((replay_median, main_values))
+    points.sort()
+
+    def draw(axes, xs_values, colour, marker, label):
+        """Median dots joined by a line, with min-max bars."""
+        if not xs_values:
+            return
+        xs = [x for x, _ in xs_values]
+        middles = [statistics.median(v) for _, v in xs_values]
+        lows = [m - min(v) for m, (_, v) in zip(middles, xs_values, strict=True)]
+        highs = [max(v) - m for m, (_, v) in zip(middles, xs_values, strict=True)]
+        axes.errorbar(
+            xs,
+            middles,
+            yerr=[lows, highs],
+            color=colour,
+            marker=marker,
+            markersize=7,
+            markeredgecolor=SURFACE,
+            capsize=4,
+            linewidth=2,
+            label=label,
+        )
+
+    draw(left, points, colour, marker, name + " (fake AI)")
+    ai_values = numbers(kill_runs(runs, part="ai", kind="fixed"), "recovery_s")
+    if ai_values:
+        # Drawn at the replayed times' median: those times were measured on
+        # the same Ollama, 4 texts at once (Slice 10), as the real-AI runs.
+        ai_colour, ai_marker, ai_name = E2_AI_STYLE
+        draw(
+            left,
+            [(replay_median, ai_values)],
+            ai_colour,
+            ai_marker,
+            ai_name + "; x = replayed time",
+        )
+    # The stale time these runs used, read from the data, not typed in.
+    stale_values = numbers(
+        [r for r in kill_runs(runs) if r.get("part") in ("main", "sensitivity")],
+        "stale_seconds",
+    )
+    stale = statistics.median(stale_values) if stale_values else None
+    if stale is not None:
+        left.axhline(stale, color=MUTED, linestyle="--", linewidth=1)
+        left.annotate(
+            f"stale time ({stale:g} s)",
+            xy=(0.02, stale),
+            xycoords=("axes fraction", "data"),
+            xytext=(0, 4),
+            textcoords="offset points",
+            color=MUTED,
+            fontsize=8,
+        )
+    broken = kill_runs(runs, kind="broken")
+    if broken:
+        never = [r for r in broken if r.get("recovery_s", "") == ""]
+        highest = [v for _, vs in points for v in vs] + ai_values + [stale or 0]
+        top = max(highest) * 1.25
+        left.axhspan(top, top * 1.12, color=E2_STYLE["broken"][0], alpha=0.15)
+        left.annotate(
+            f"Broken: never recovers ({len(never)} of {len(broken)} runs)",
+            xy=(0.02, top * 1.06),
+            xycoords=("axes fraction", "data"),
+            va="center",
+            color=TEXT,
+            fontsize=9,
+        )
+        left.set_ylim(0, top * 1.12)
+    left.set_xscale("log", base=2)
+    left.set_xticks(
+        [0.5, 1, 2, 4, replay_median],
+        ["0.5", "1", "2", "4", f"{replay_median:.1f}\n(replay)"],
+    )
+    style(
+        left,
+        "Recovery time vs wait per text",
+        "Seconds the AI takes per text (log scale)",
+        "Seconds from kill to first text finished",
+    )
+    left.legend(frameon=False, labelcolor=TEXT, loc="center right", fontsize=8)
+
+    stale_points = []
+    for value in ["10", "30", "60"]:
+        values = numbers(
+            kill_runs(runs, part="stale", stale_seconds=value), "recovery_s"
+        )
+        if values:
+            stale_points.append((float(value), values))
+    draw(right, stale_points, colour, marker, name)
+    if stale_points:
+        xs = [x for x, _ in stale_points]
+        right.plot(
+            xs,
+            xs,
+            color=MUTED,
+            linestyle="--",
+            linewidth=1,
+            label="recovery = stale time",
+        )
+        right.set_xticks(xs)
+        right.legend(frameon=False, labelcolor=TEXT, loc="upper left", fontsize=8)
+    right.set_ylim(bottom=0)
+    style(
+        right,
+        "Recovery time vs stale time",
+        'Stale time ("stuck after", s)',
+        "Seconds from kill to first text finished",
+    )
+    save(figure, "e2_recovery.png")
+
+
+def e2_numbers(runs: list[dict], cost: list[dict], code: list[dict]) -> None:
+    """Print the E2 key numbers: median (min-max) of the runs, per setting."""
+    columns = ["lost", "redone", "takeover_s", "recovery_s", "finish_s", "restart_s"]
+    keys = sorted(
+        {
+            (r["part"], r["kind"], r["wait"], r["stale_seconds"])
+            for r in runs
+            if r.get("part")
+        }
+    )
+    for part, kind, wait, stale in keys:
+        group = [
+            r
+            for r in runs
+            if (r["part"], r["kind"], r["wait"], r["stale_seconds"])
+            == (part, kind, wait, stale)
+        ]
+        good = [r for r in group if not r.get("error")]
+        parts = []
+        for column in columns:
+            values = numbers(good, column)
+            parts.append(
+                f"{column} {median_and_spread(values) if values else 'never/n.a.'}"
+            )
+        states = Counter(r["final_state"] for r in good)
+        late = sum(int(r["late_looks"] or 0) for r in good)
+        print(
+            f"E2 {part} {kind} wait {wait} stale {stale}: {len(good)} runs "
+            f"({len(group) - len(good)} errors); "
+            + "; ".join(parts)
+            + f"; final {dict(states)}; late looks {late}"
+        )
+    if cost:
+        for column in [
+            "job_s",
+            "all_writes",
+            "heartbeat_writes",
+            "heartbeats_expected",
+            "heartbeat_share",
+        ]:
+            values = numbers(cost, column)
+            if not values:
+                continue
+            if column == "heartbeat_share":
+                shown = f"{statistics.median(values):.1%} (median)"
+            else:
+                shown = median_and_spread(values)
+            print(f"E2 cost {column}: {shown}")
+    for row in code:
+        print(f"E2 code {row['what']}: {row['lines']} lines")
+
+
+def e2_charts() -> None:
+    """Draw the E2 charts and print its numbers, if E2 has been measured."""
+    if not (DATA / "e2_runs.csv").exists():
+        return
+    runs = read("e2_runs.csv")
+    replay_median = statistics.median(
+        float(r["seconds"]) for r in read("ollama_times_at_4.csv")
+    )
+    e2_lost_redone_chart(runs)
+    e2_recovery_chart(runs, replay_median)
+    cost = read("e2_cost.csv") if (DATA / "e2_cost.csv").exists() else []
+    code = read("e2_code.csv") if (DATA / "e2_code.csv").exists() else []
+    e2_numbers(runs, cost, code)
+
+
 def main() -> None:
     """Draw all the charts and print the key numbers."""
     alone_rows = read("ollama_times.csv")
@@ -554,6 +843,7 @@ def main() -> None:
         print(f"{n} at once: median {seconds:.1f} s for all 100 texts")
     print("It", stops_getting_faster(medians) + ".")
     e1_charts()
+    e2_charts()
     print(f"Charts written to {CHARTS}.")
 
 

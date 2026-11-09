@@ -1,0 +1,58 @@
+# Experiment E2 only: changes to compose.yaml for the kill runs (D100-D102).
+#
+# Used only by `bench/e2_kill.py`, always together with compose.yaml and under
+# its own project name (kuyruk-e2), so it has its own containers and its own
+# database and never touches the demo's data (like D86):
+#
+#   docker compose -p kuyruk-e2 -f compose.yaml -f bench/e2_compose.yaml ...
+#
+# What changes compared with the demo:
+# - real use, not the demo: DEMO_MODE false, real timings (heartbeat 5 s,
+#   stuck after 30 s, or the stale time being tested), experiments on (D95);
+# - no settings from .env reach the containers: the script sets every value
+#   itself, so a local .env can't change the experiment by accident. The
+#   secrets are throwaway ones the script makes for each session (never
+#   printed);
+# - a daily token budget large enough for every job of the session;
+# - other ports (8020, 5442), so it can run next to a normal Kuyruk.
+#
+# `!reset` and `!override` are Compose's ways of saying "replace the value
+# from compose.yaml" instead of adding to it. `${NAME:?}` makes Compose stop
+# with an error if the script didn't set NAME.
+
+x-e2-app: &e2-app
+  env_file: !reset []
+  environment:
+    EXPERIMENTS_ENABLED: "true"
+    DEMO_MODE: "false"
+    JWT_SECRET: ${E2_JWT_SECRET:?}
+    DATABASE_URL: postgresql+psycopg://kuyruk:${E2_POSTGRES_PASSWORD:?}@db:5432/kuyruk
+    AI_BACKEND: ${E2_AI_BACKEND:?}
+    FAKE_AI_WAIT_MODE: ${E2_FAKE_AI_WAIT_MODE:?}
+    FAKE_AI_WAIT_SECONDS: ${E2_FAKE_AI_WAIT_SECONDS:?}
+    FAKE_AI_REPLAY_FILE: bench/data/ollama_times_at_4.csv
+    HEARTBEAT_SECONDS: ${E2_HEARTBEAT_SECONDS:?}
+    STALE_AFTER_SECONDS: ${E2_STALE_AFTER_SECONDS:?}
+    # The worker's usual numbers (app/settings.py defaults), written out so
+    # the experiment states what it ran with.
+    TEXTS_AT_ONCE: "4"
+    WORKER_POLL_SECONDS: "1"
+    MAX_CRASH_COUNT: "3"
+    SHUTDOWN_GRACE_SECONDS: "8"
+    # Far more than every job of a session needs (about 100 jobs).
+    DAILY_TOKEN_BUDGET: "1000000000"
+
+services:
+  db:
+    environment:
+      POSTGRES_PASSWORD: ${E2_POSTGRES_PASSWORD:?}
+    ports: !override
+      - "127.0.0.1:5442:5432"
+
+  api:
+    <<: *e2-app
+    ports: !override
+      - "127.0.0.1:8020:8000"
+
+  worker:
+    <<: *e2-app
