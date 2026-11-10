@@ -136,6 +136,9 @@ class Settings(BaseSettings):
     fake_ai_replay_file: str = "bench/data/ollama_times_at_4.csv"
     fake_ai_seed: int = 42
     fake_ai_answer: str = "Bu metin kısaca özetlenmiştir."
+    # In demo mode the fake AI answers "Demo: " plus each text's first this
+    # many words instead, so results differ and are clearly not real (D125).
+    fake_ai_demo_words: int = Field(default=6, ge=1)
     # Failing on purpose: 0 = never, 1 = every call, N = every Nth call. A retry
     # is a new call, so with N above 1 a retried text can succeed. The kind says
     # whether the failure is temporary (worth retrying) or permanent.
@@ -189,6 +192,12 @@ class Settings(BaseSettings):
     # for long by accident.
     experiments_enabled: bool = False
     e1_max_wait_seconds: float = Field(default=10.0, gt=0)
+
+    # The web interface's address (its *origin*: scheme, host and port), the
+    # only website whose pages may call the API from a browser (CORS, D121).
+    # A browser asks the API before such a call, and the API answers "yes"
+    # only for this origin. compose.yaml serves the interface here.
+    web_origin: str = "http://localhost:8080"
 
     # The worker's "I'm alive" file (D79), for Docker's health check. When a
     # path is set, the worker touches (re-dates) the file on every pass of its

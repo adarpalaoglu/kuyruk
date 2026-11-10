@@ -358,7 +358,7 @@ def test_e3_on_github_whose_status_cannot_be_read(monkeypatch):
 def test_charts_and_check_reports_differences(monkeypatch, capsys):
     """Each differing number is listed; the count is returned."""
     monkeypatch.setattr(
-        run_all.check_numbers, "check", lambda: (10, ["E4: doc 90 s, data 91 s"])
+        run_all.check_numbers, "check", lambda **_: (10, ["E4: doc 90 s, data 91 s"])
     )
     assert run_all.charts_and_check(lambda: 0) == 1
     assert "1 of 10 numbers" in capsys.readouterr().out
@@ -366,7 +366,7 @@ def test_charts_and_check_reports_differences(monkeypatch, capsys):
 
 def test_charts_and_check_all_match(monkeypatch, capsys):
     """No difference: one line saying so."""
-    monkeypatch.setattr(run_all.check_numbers, "check", lambda: (10, []))
+    monkeypatch.setattr(run_all.check_numbers, "check", lambda **_: (10, []))
     assert run_all.charts_and_check(lambda: 0) == 0
     assert "All 10 numbers" in capsys.readouterr().out
 

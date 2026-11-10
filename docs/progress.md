@@ -3,7 +3,7 @@
 Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12 lists the slices).
 
 ## Current slice
-**Slice 16** (not started). Slice 15 done.
+**Slice 18** (not started). Slice 17 done.
 
 ## Slices
 
@@ -25,8 +25,8 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 | 13 | E3 | ☑ | Prediction written? ☑ (pushed first, 87b1a6a). 641 tests (6 on Postgres skipped locally), 99.7% coverage; 120 builds (Mac + GitHub Actions), 0 failed, all 5 images start. Simple → careful image: Mac 1,331 → 259 MB (5.1×), GitHub 1,220 → 207 MB (5.9×); 98% of the gap is the base image alone; one-line change rebuild 15.6 → 0.5 s (Mac) |
 | 14 | E4 | ☑ | Prediction written? ☑ (pushed first, 95cf984). 675 tests (6 on Postgres skipped locally), 99.7% coverage; 21 CI runs on GitHub (20 counted, 1 failed on a flaky Slice 11 test and replaced by run 21 on the same commit). Job time cache on 90 s vs off 90 s: the cache saves nothing (download 0.4 s; restore costs 1.3 s). Secret: yes for every push, own-branch pull request, manual run and Release after a push (41 runs); Release after a manual run skipped (21/21); fork pull request not tested (documented) |
 | 15 | Extras (TR vs EN, one-command rerun) | ☑ | Prediction written? ☑ (pushed first, 1108882). 753 tests (6 on Postgres skipped locally), 99.7% coverage. 50 reviews, Gemma counted twice (all equal). Turkish ÷ English, all 50: o200k_base 1.24 (+24%), Gemma 1.13 (+13%). `run_all --charts-only`: charts redrawn, all 308 numbers match |
-| 16 | Interface mockup approved | ☐ | |
-| 17 | Interface build | ☐ | |
+| 16 | Interface mockup approved | ☑ | Approved by Adar 10 Nov 2026; source in `docs/mockup/` (canvas link in its README) |
+| 17 | Interface build | ☑ | 818 fast tests (+6 Postgres, +18 browser), 99.71% coverage; 18/18 browser tests incl. axe on 8 screens × 2 languages; clean-machine check 21/21 PASS; number check 362/362; sample job (100 reviews) 186.5 s in demo mode |
 | 18 | README, video, write-up, freeze | ☐ | |
 
 ## Decision log
@@ -43,11 +43,27 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 - D105–D107 (E3) · Approved by Adar: ☑ (9 Nov 2026); D106 update (uncompressed size = sum of the layers, Mac run repeated) Adar's decision 9 Nov 2026
 - D108–D109 (E4) · Approved by Adar: ☑ (9 Nov 2026)
 - D110–D114 (Turkish vs English cost, one-command rerun, number check) · Approved by Adar as drafted: ☑ (9 Nov 2026); their "Why" lines were added afterwards, for Adar to glance at
+- D115–D124 (web interface) and the spec 6 / 8 / 10 wording updates · Approved by Adar: ☑ (10 Nov 2026, approved with the Slice 17 plan; written in his voice afterwards); D125 (demo AI answer) asked for by Adar after the review, 10 Nov 2026
 - D87–D93 (real AI measurements; D88 and D93 reworded as Adar asked) and the D82 "done" note · Approved by Adar: ☑ (8 Nov 2026); D89 update (memory emptied before every run) and D91 addition approved 8 Nov 2026; D94 (10-minute heat-up) approved 8 Nov 2026
 
-## Interface parity (fill in at slice 17)
-Everything on `/docs` can be done in the interface:
-☐ register ☐ log in ☐ send job ☐ idempotency (double-click safe) ☐ job status ☐ list + filter ☐ results + download ☐ live progress ☐ cancel ☐ budget ☐ health/status ☐ crash demo
+## Interface parity (checked 10 Nov 2026, Slice 17)
+Everything on `/docs` can be done in the interface (each proved by a browser test unless noted):
+
+| Endpoint (on /docs) | Where in the interface | ✓ |
+|---|---|---|
+| POST /register | Login: "Create your account" (signs up, then logs in) | ☑ |
+| POST /token | Login: "Log in" | ☑ |
+| POST /jobs | New job: task switch, text box / sample reviews / file upload (.txt, .csv, .json; JSON keeps texts with line breaks), Send | ☑ |
+| Idempotency-Key | New job: one key per exact content, so a double-click or a resend gets the same ticket | ☑ |
+| GET /jobs/{ticket} | Job page (state, counts, time left) | ☑ |
+| GET /jobs?status=&limit=&offset= | My jobs: All / Queued / Running / Done / Failed / Cancelled, "Show more" | ☑ (Show more: by code, not by a test) |
+| GET /jobs/{ticket}/results | Results page (original beside result), Download CSV / JSON; Job page dots and "Just finished" | ☑ |
+| GET /jobs/{ticket}/events | Job page, live (fetch + Authorization header, reconnect with fresh snapshot); The experiments, crash steps | ☑ |
+| POST /jobs/{ticket}/cancel | Job page: "Cancel job" | ☑ |
+| GET /me/budget | Account menu: budget bar, tokens left, reset time; 429 shown on New job | ☑ |
+| POST /jobs/estimate (new) | New job: the cost line ("12 texts · 274 tokens · … left today") | ☑ |
+| GET /health, GET /status (new) | System status (account menu → System status) | ☑ |
+| POST /demo/crash-worker | The experiments: "Simulate a crash" (demo mode only) | ☑ |
 
 ## Open items / leftovers
 - `JWT_SECRET` is required (min 32 characters); Kuyruk refuses to start without it. A random one was added to the local `.env`. Tests use their own throwaway secret (set in `tests/conftest.py`), so CI needs none.
@@ -196,6 +212,23 @@ Slice 15 (extras, limits for the README, and leftovers):
 - Code review (10 findings, all fixed with Adar's approval): the sums moved to `bench/cost_sums.py`, which loads nothing from `app/`, so the charts and `--charts-only` work without `JWT_SECRET` (test runs it in a fresh Python with no secret); "uncommitted work" in the cost run's notes is read before the run writes anything; `--check-only` no longer opens Docker Desktop (only checks it is installed; the rerun opens it before E2); the number check reports missing measurements instead of crashing, follows the measured library count, and states a broken "pip adds exactly N MB" claim plainly; the time summary is printed whatever stops the rerun; the charger line comes from `measure_ollama.check_setup(charger=False)` instead of a text filter; the cost script reuses `measure_ollama`'s helpers (`check_model`, `command_output`); docstrings added. After the fixes a recount of all 50 reviews with real Gemma (not saved) matched the recorded run exactly; the recorded run's notes in `setup.md` say it was measured before the commit.
 - Rerun everything: `uv run --group bench python -m bench.run_all` (`--check-only`, `--charts-only`; `bench/data/README.md`). Cost count alone: `uv run python -m bench.cost_tr_en` (about 2 minutes).
 
+Slice 17 (web interface, limits for the README, and leftovers):
+- **What exists:** `web/` (8 pages, plain HTML/CSS/JS, no build step, D115), served by nginx 1.30.6 (unprivileged, pinned by digest) at http://localhost:8080; API at :8000. New API pieces: `GET /status` (public, D117), `POST /jobs/estimate` (D119), CORS for `WEB_ORIGIN` only (D121; a refused preflight now also uses the error shape, `cors_refused`, found while showing the real replies). Settings `WEB_ORIGIN`, and `WEB_API_URL` for nginx (`.env.example`).
+- **Mockup changes Adar approved:** "The experiments" everywhere; a 6th filter "Queued"; "Show more"; measured number words become digits ("Twenty runs" → "20 runs"); "reviews" → "texts" on job screens; crash steps show real seconds.
+- **Screenshots:** `docs/screenshots/` (19: 8 screens × 1280/390 px in English, Welcome/Job/Results in Turkish), made by `uv run --group browser python scripts/screenshots.py` (makes its own data as "ayse" or "ayse_xxxxxx", crashes the 500-text job for the notice, cancels it at the end).
+- **Comparison with the mockup (every screen, by Claude, 10 Nov 2026):** layout, text, sizes and colours match after four fixes made during the comparison (page column widths measured like the mockup; the job list rows' class clash; the account menu 40 px too narrow; the empty crash message line; the login switch line 13 px low; the "Just finished" gap). Remaining visible differences, all from data or deliberate: the numbers on Job/My jobs/Results come from real demo jobs (e.g. 20 / 500 not 212 / 500); results are the demo AI's "Demo: <first 6 words>…" (D125), and the sample reviews include long ones, so New job and Results show longer text than the mockup's short lines; demo jobs never fail, so the red "Failed" row and "couldn't be summarised" line don't appear in the screenshots (both are built and covered by code); a failed text says "Not summarised: <the AI's own reason>" rather than the mockup's "the AI didn't answer after 3 tries"; "Cancel job" sits level with "See results so far" (the mockup has it 12 px lower); at 390 px the menu wraps and the gutter is 16 px (the mockup has no phone rules, so its menu overlaps); the status page shows "1 second" at least, never "0 seconds".
+- **Limit:** the "another worker took over … Nothing was lost." notice shows only to someone watching the job at the takeover; opening it later shows the usual snapshot (D73, D122). The browser test watches in one tab and crashes from another.
+- **Limit:** the pass is per tab (D116): a second tab must log in again; closing the tab logs out.
+- **Error messages:** every error code the API can send (19) has its own Turkish and English text (`error_code` in `web/i18n/*.json`); an unknown code shows the API's own message. For refused jobs and budget refusals, the API's own sentence (which text broke which rule, how many tokens) follows as a small "Details from the API" line, in English. **Limit:** a failed text's reason (from the AI) stays as the worker wrote it, in English.
+- **Demo AI answers (D125):** in demo mode every answer is "Demo: " plus the text's first 6 words (`FAKE_AI_DEMO_WORDS`); the waits are unchanged, and no experiment runs in demo mode.
+- **Sample reviews:** "Use sample reviews" fills in all 100 reviews of `bench/data/reviews_tr.csv`, one per line (line breaks inside a review become spaces): 19,192 tokens, so 10 sample jobs fit the 200,000 daily budget. **Measured in demo mode (10 Nov 2026):** 0.6 s queued, 186.0 s working, so 186.5 s in all for 100 texts, all ok (the real Gemma took 182 s at 4 at once, Slice 10).
+- **Limit:** "Working now" dots are an estimate (D122).
+- **E4 rerun fix:** ci.yml now has two jobs, so `bench/e4_ci.py` picks the `test` job by name and reads only its log, and stops with a clear error if a run has named jobs but none called `test` (tests added). The `browser` job doesn't run on manual runs (E4's timing runs) and has its own uv cache. The published E4 numbers are unchanged.
+- **Code review (10 findings, all fixed):** (1) the normal test run failed without Playwright (CI's `test` job would have gone red): the browser file is now skipped without it; (2) the browser job skipped on manual runs, own cache; (3) a broken `sample_reviews.json` is reported, not a crash; (4) a leftover alive file in the shared /tmp could make a recreated worker look healthy: compose's worker command deletes it first, then `exec`s Python (still process 1). This was done in compose, not `app/worker.py`, so E2's counted worker lines stay 462, D104; (5) a failed `/status` answer is retried by the next caller; (6) no typed-in "4 texts at once" fallback; (7) CSV cells starting with = + - @ get a leading apostrophe (Excel formula protection; JSON unchanged); (8) the "no typed numbers" check also reads alt/title/aria-label/placeholder/value; (9) see E4 rerun fix; (10) plain-English comments on every JS function.
+- **Shared /tmp:** compose shares /tmp between api and worker for the alive file (D118); the Dockerfile is unchanged (E3's uv-good must keep matching it).
+- Browser tests: `docker compose up -d --wait`, then `KUYRUK_WEB_URL=http://localhost:8080 uv run --group browser pytest tests/browser -v --no-cov` (about 3 minutes; first time `uv run --group browser playwright install chromium`). The tests open the browser with Playwright's "bypass CSP" (the site's safety header otherwise blocks the code Playwright injects); the site itself is unchanged.
+- Inter 4.1 (4 weights, OFL) in `web/fonts/`; axe-core 4.14.0 (MPL-2.0) in `tests/browser/vendor/`; Playwright 1.64.1 in the `browser` group.
+
 ## Session log
 - 6 Nov 2026 — Planning finished in Claude app. Starting documents created. Tools installed. Decision log D01–D41 approved.
 - 6 Nov 2026 — Slice 0 done: uv project (Python 3.12, exact pins + `uv.lock`), folders, `app/settings.py`, `/health` + tests, `.env.example`, `.gitignore`, MIT licence, placeholder README, `ci.yml` (ruff + pytest, 85% gate).
@@ -214,3 +247,4 @@ Slice 15 (extras, limits for the README, and leftovers):
 - 9 Nov 2026 — Slice 13 done: prediction pushed first (87b1a6a). Five E3 Dockerfiles in `docker/` (pip-slim identical to pip-good except FROM, checked by a test), `bench/e3_build.py`, manual `e3.yml` workflow, two charts, E3 write-up filled (Why/Takeaway left for Adar). D105–D107 approved; D106 updated (layer-sum size) and the Mac run repeated. Mac and GitHub runs: 120/120 builds ok.
 - 9 Nov 2026 — Slice 14 done: prediction pushed first (95cf984). `bench/e4_ci.py` (20 manual CI runs on GitHub, cache on/off interleaved, step times from log timestamps; secret lines with links), chart `e4_cache.png`, E4 write-up filled (Why/Takeaway left for Adar). D108–D109 approved. One rerun of the series after a GitHub "not found" (script now retries); secrets collection corrected (only published Release runs as "after a push", no duplicates).
 - 9 Nov 2026 — Slice 15 done: prediction pushed first (1108882). 50 reviews picked (seed 15) and translated by Claude, 5 pairs checked by Adar; `bench/cost_tr_en.py` (o200k_base + Gemma raw mode, counted twice), chart `cost_tr_en.png`, cost write-up (Why/Takeaway left for Adar). `bench/run_all.py` (prerequisites, Docker quit/open, E3 GitHub download, timings, `--charts-only`, `--check-only`) and `bench/check_numbers.py` (308 numbers). Three 1 ms slips in E1 fixed. D110–D114 approved.
+- 10 Nov 2026 — Slice 17 done: web interface (8 screens, TR/EN, live progress, crash button), `GET /status`, `POST /jobs/estimate`, CORS, `bench/web_data.py` + number check on the interface, `web` service in compose, browser tests (Playwright + axe) as their own CI job, 19 screenshots compared with the mockup. D115–D124 and spec 6/8/10 updates approved. Review: 10 findings fixed; added demo answers (D125), Turkish messages for every API error code, all 100 sample reviews.

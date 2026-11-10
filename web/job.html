@@ -1,0 +1,51 @@
+<!doctype html>
+<!-- One job, live (docs/mockup/Job.dc.html): the big count, one status
+     sentence, one dot per text, the recovered notice, the latest results and
+     Cancel. GET /jobs/{ticket}, GET /jobs/{ticket}/results, the live stream
+     GET /jobs/{ticket}/events, POST /jobs/{ticket}/cancel. js/pages/job.js. -->
+<html lang="en" class="loading">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kuyruk</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/style.css">
+<script src="config.js"></script>
+<script type="module" src="js/pages/job.js"></script>
+</head>
+<body data-page="job">
+<a class="skip-link" href="#main" data-i18n="header.skip"></a>
+<header class="site-header" id="site-header"></header>
+<main id="main" class="job-main">
+  <p class="message" id="job-error" role="alert" hidden></p>
+  <div id="job-view" class="job-view" hidden>
+      <div class="job-top">
+        <p class="live-line"><span class="live-dot" id="live-dot" aria-hidden="true"></span><span id="kicker"></span></p>
+        <h1 class="big-count" id="big-count"></h1>
+        <p class="status-sentence" id="sentence" aria-live="polite"></p>
+        <p class="counts-line" id="counts"></p>
+      </div>
+      <div class="progress" role="progressbar" id="progress" aria-valuemin="0" data-i18n-aria="job.progress"><span id="progress-fill"></span></div>
+      <section class="dots-section" data-i18n-aria="job.dots">
+        <div class="dots" id="dots" aria-hidden="true"></div>
+        <ul class="legend">
+          <li><span class="dot ok" aria-hidden="true"></span><span data-i18n="job.legend_ok"></span></li>
+          <li><span class="dot working" aria-hidden="true"></span><span data-i18n="job.legend_working"></span></li>
+          <li><span class="dot failed" aria-hidden="true"></span><span data-i18n="job.legend_failed"></span></li>
+          <li><span class="dot" aria-hidden="true"></span><span data-i18n="job.legend_waiting"></span></li>
+        </ul>
+      </section>
+      <p class="notice" id="recovered" role="status" hidden></p>
+      <section class="latest" id="latest" aria-labelledby="latest-title" hidden>
+        <h2 id="latest-title" data-i18n="job.latest"></h2>
+        <div id="latest-rows"></div>
+      </section>
+      <p class="message" id="cancel-error" role="alert" hidden></p>
+      <div class="job-actions">
+        <a id="results-link"></a>
+        <button type="button" class="cancel-button" id="cancel"></button>
+      </div>
+  </div>
+</main>
+</body>
+</html>

@@ -516,3 +516,37 @@ def test_secrets_alone_reads_the_recorded_runs(tmp_path, monkeypatch):
     monkeypatch.setattr(e4_ci, "secrets_part", fake_secrets)
     e4_ci.main(["--part", "secrets", "--trial", str(tmp_path)])
     assert seen["runs"] == [100, 101]
+
+
+# ---- Two jobs in one run (since Slice 17) ----------------------------------
+
+
+def test_job_of_picks_the_test_job_when_the_run_has_two():
+    record = {
+        "jobs": [
+            {"id": 7, "name": "browser", "started_at": "a"},
+            {"id": 8, "name": "test", "started_at": "b"},
+        ]
+    }
+    gh = FakeGh(jobs={100: record})
+    assert e4_ci.job_of(100, gh)["id"] == 8
+
+
+def test_job_of_falls_back_to_the_only_job_without_names():
+    gh = FakeGh(jobs={100: job()})
+    assert e4_ci.job_of(100, gh)["started_at"] == "2026-11-09T13:57:50Z"
+
+
+def test_run_log_asks_for_one_jobs_log():
+    gh = FakeGh()
+    e4_ci.run_log(100, gh, 8)
+    assert gh.commands[-1][-2:] == ["--job", "8"]
+    e4_ci.run_log(100, gh)
+    assert "--job" not in gh.commands[-1]
+
+
+def test_job_of_refuses_a_run_without_a_test_job():
+    record = {"jobs": [{"id": 7, "name": "browser"}, {"id": 8, "name": "Tests"}]}
+    gh = FakeGh(jobs={100: record})
+    with pytest.raises(e4_ci.Stop, match="no job named 'test'"):
+        e4_ci.job_of(100, gh)

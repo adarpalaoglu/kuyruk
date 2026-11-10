@@ -334,17 +334,41 @@ def wait_for_run(
         sleep(POLL_SECONDS)
 
 
+# The CI job E4 times. Since Slice 17, ci.yml has a second job (`browser`,
+# the interface's browser tests); E4 measured, and a rerun must measure, only
+# this one.
+CI_JOB = "test"
+
+
 def job_of(run_id: int, runner: Runner = run) -> dict:
-    """The run's one job, with its steps, from GitHub's records."""
+    """The run's `test` job, with its steps, from GitHub's records.
+
+    A record without job names (as in older test data) falls back to its
+    first job. A run whose jobs have names but none called `test` stops the
+    measurement: timing another job (e.g. `browser`) as E4's would be wrong.
+    """
     jobs = gh_json(
         ["api", f"repos/{{owner}}/{{repo}}/actions/runs/{run_id}/jobs"], runner
     )["jobs"]
+    named = [j for j in jobs if j.get("name") == CI_JOB]
+    if named:
+        return named[0]
+    if any("name" in j for j in jobs):
+        raise Stop(f"run {run_id} has no job named {CI_JOB!r}")
     return jobs[0] if jobs else {}
 
 
-def run_log(run_id: int, runner: Runner = run) -> str:
-    """The run's full log; blank if GitHub has none (e.g. a skipped job)."""
-    result = gh(["run", "view", str(run_id), "--log"], runner)
+def run_log(run_id: int, runner: Runner = run, job_id: int | None = None) -> str:
+    """The log of the run's job `job_id` (or of the whole run, without it).
+
+    One job's log only, so another job's steps (with the same names, e.g.
+    "Set up job") can't mix into the step times. Blank if GitHub has none
+    (e.g. a skipped job).
+    """
+    command = ["run", "view", str(run_id), "--log"]
+    if job_id is not None:
+        command += ["--job", str(job_id)]
+    result = gh(command, runner)
     return result.stdout if result.returncode == 0 else ""
 
 
@@ -367,7 +391,7 @@ def measure_run(
         return row, []
     row["queue_s"] = seconds_between(details["createdAt"], job["started_at"])
     row["job_s"] = seconds_between(job["started_at"], job["completed_at"])
-    lines = log_lines(run_log(run_id, runner))
+    lines = log_lines(run_log(run_id, runner, job.get("id")))
     if not lines:
         row["error"] = "no log"
         return row, []

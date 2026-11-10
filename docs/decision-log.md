@@ -631,3 +631,70 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 ### D41 — Finished means frozen
 - **Why:** All versions are pinned and nothing runs online, so the project stays exactly as I left it.
 - **Date:** 6 Nov 2026 · **Status:** Approved (6 Nov 2026)
+
+---
+
+## Web interface (Slice 17)
+
+### D115 — The interface is plain HTML, CSS and JavaScript, served by nginx on its own address
+- **Options:** a framework (React, Vue) with a build step · plain files, no build step.
+- **Decision:** plain HTML, CSS and JavaScript files in `web/`, with no framework and no build tools. A small web server, nginx (`nginxinc/nginx-unprivileged`, pinned by version and digest, running as a normal user), serves them on their own address, http://localhost:8080, as the `web` service in compose. The API's address reaches the pages through `/config.js`, which nginx writes from the `WEB_API_URL` setting, so it is never typed into the pages.
+- **Why:** the project is frozen. A framework and its build tools bring hundreds of packages that age and need updates; plain files open the same way in ten years. A separate address makes the browser's cross-site rule (CORS) real, so its test means something (spec 10).
+- **Date:** 10 Nov 2026 · **Status:** Approved (10 Nov 2026)
+
+### D116 — The login pass lives only in the tab; the language choice is remembered
+- **Decision:** after logging in, the pass is kept in the browser's sessionStorage, which is emptied when the tab closes. It is never in localStorage and never in an address (D67). The TR/EN choice is kept in localStorage. The first visit follows the browser's language.
+- **Why:** a pass kept on the computer could be read later by anyone using it; a pass that disappears with the tab can't. The language isn't secret, and having to pick it again on every visit would be annoying.
+- **Cost:** closing the tab logs you out, and a second tab has to log in again.
+- **Date:** 10 Nov 2026 · **Status:** Approved (10 Nov 2026)
+
+### D117 — A public `GET /status` that shows counts only
+- **Decision:** `GET /status` needs no login. It reports: the API (ok), the database (a tiny query: ok or down), the worker (D118), how many jobs are running and waiting, which AI is used and whether demo mode is on, and the limits the interface shows (texts per job, password length...). It shows no user names and no tickets.
+- **Why:** the System status screen must work for anyone, including before logging in. Counts and settings reveal nothing about anyone's work. Sending the limits means no limit is typed into the interface: if a setting changes, every screen follows.
+- **Date:** 10 Nov 2026 · **Status:** Approved (10 Nov 2026)
+
+### D118 — The worker's sign of life comes from its existing alive file
+- **Options:** a new database table the worker writes every second · the API reads the worker's alive file (D79) through a folder both containers share · only the heartbeat of a running job.
+- **Decision:** compose gives the api and the worker one shared Docker volume for /tmp; the API reads how old the worker's alive file is. Fresh means "ok", older than 30 s means "down", and no file (e.g. running outside Docker) means "unknown".
+- **Why:** it adds no database writes, so E2's write counts stay the same on a rerun, and it reuses what already proves the worker's loop is turning. A running job's heartbeat alone couldn't say anything when no job runs.
+- **Cost:** it works only where the two programs share a folder (Docker on one machine); elsewhere the screen honestly says "unknown". The shared folder is /tmp because it is already writable by the worker's normal user in both images, so the Dockerfile (which E3's uv-good copies) didn't change.
+- **Date:** 10 Nov 2026 · **Status:** Approved (10 Nov 2026)
+
+### D119 — `POST /jobs/estimate` shows the cost before sending
+- **Decision:** a new address (login needed) takes the same body as `POST /jobs`, checks it with the same rules (the same 422s, including "bigger than the whole daily limit"), counts the tokens exactly as the budget does (`tokens_for_job`, D57) and replies `{texts, tokens_needed, left_today}`. Cleaning and counting jobs reply `tokens_needed: null`, because they are free. It saves nothing and locks nothing.
+- **Why:** the New job screen shows "12 texts · 274 tokens · 199,726 left today" before you press Send, and also shows a broken job's problem then. The browser can't count tokens itself: the counter is a Python library.
+- **Cost:** the number can be out of date by the time you send (another job of yours may have been accepted meanwhile). The real check still happens on sending.
+- **Date:** 10 Nov 2026 · **Status:** Approved (10 Nov 2026)
+
+### D120 — The story numbers are generated from the data, and checked
+- **Decision:** `bench/web_data.py` computes every number on the Welcome and The experiments pages from the CSV files and writes `web/data/findings.json`, which the pages read; no number is typed into a page. Each number has one stated rounding rule: half up, as a person rounds (252 s, 7 ms, 0.007 s, +24%); "times faster" for E1 rounded down to two figures (36,000×); E3 to one figure (30×); "about 30 seconds" to the nearest 10. `bench.charts` (and so `run_all --charts-only`) writes it too. The number check also confirms that `findings.json` and the sample reviews match the data, that no page or language file holds a typed digit (except names such as "Gemma 4 E4B" and "Experiment 1"), and that the facts the pages say in words ("under half a second", "five versions", "two machines") still hold.
+- **Why:** numbers copied by hand go stale silently after a rerun. Generated and checked numbers can't.
+- **Date:** 10 Nov 2026 · **Status:** Approved (10 Nov 2026)
+
+### D121 — CORS allows only the interface's address
+- **Decision:** a new setting, `WEB_ORIGIN` (default http://localhost:8080), is the only address whose pages may call the API from a browser. It may send `Authorization`, `Content-Type`, `Idempotency-Key` and `X-Request-ID`, and read `X-Request-ID`, `Retry-After` and `Location`. CORS is the outermost layer, so error replies carry the headers too and the interface can show their message.
+- **Why:** any other website open in the same browser must not be able to use the API. Allowing one address and only the headers really needed is the smallest opening that works.
+- **Date:** 10 Nov 2026 · **Status:** Approved (10 Nov 2026)
+
+### D122 — The live dots come from the results, at most once a second
+- **Decision:** the Job screen colours one dot per text from `GET /jobs/{ticket}/results`, read again after progress at most once a second. "Working now" is an estimate: the lowest-numbered waiting texts, up to texts-at-once, because the stream only sends counts.
+- **Why:** it needs no change to the stream format (spec 6.1, HAND-DESIGNED), and once a second is plenty for the eye while keeping the load small.
+- **Cost:** a text being retried may show as waiting while a later one shows as working. The "another worker took over" notice appears only to someone watching at the moment of the takeover; opening the job later shows the usual snapshot (D73).
+- **Date:** 10 Nov 2026 · **Status:** Approved (10 Nov 2026)
+
+### D123 — Browser tests with Playwright, in their own CI job
+- **Decision:** `tests/browser/` drives a real Chromium (Playwright for Python, pinned, in its own `browser` dependency group) against `docker compose up` in demo mode. It covers sign up, sample reviews, watching live to done, results and both downloads, double-click safety, cancel, crash and recovery, a dropped stream reconnecting, the TR/EN switch, the login staying in the tab, phone width, and an automatic accessibility check (axe-core 4.14.0, its file kept in the repo) on all 8 screens in both languages. Without `KUYRUK_WEB_URL` these tests are skipped. In CI they are a separate job, `browser`.
+- **Why:** only a real browser proves the pages, CORS, the stream reader and the downloads work together. A separate job leaves the `test` job, whose time E4 measured, exactly as it was (E4's rerun script now picks that job by name and reads only its log).
+- **Date:** 10 Nov 2026 · **Status:** Approved (10 Nov 2026)
+
+### D124 — Inter is served from the interface itself
+- **Options:** load Inter from Google Fonts · keep its files in `web/fonts/`.
+- **Decision:** the four weights used (400, 500, 600, 700) from Inter 4.1's official release, with its licence (SIL Open Font License), in `web/fonts/`.
+- **Why:** it works offline and forever, makes no request to another company's server when someone opens the page, and lets the safety header allow fonts from this site only.
+- **Date:** 10 Nov 2026 · **Status:** Approved (10 Nov 2026)
+
+### D125 — In demo mode, the fake AI's answer echoes each text, labelled "Demo:"
+- **Options:** keep the one fixed answer for every text ("Bu metin kısaca özetlenmiştir.") · an answer made from each text.
+- **Decision:** in demo mode only, the fake AI answers "Demo: " followed by the first 6 words of the text it received (`FAKE_AI_DEMO_WORDS`), with "…" if words were left out, e.g. "Demo: Kargo çok hızlı geldi, paketleme özenliydi,…". The text is the one the AI receives, so emails and phone numbers are already hidden (D50). Outside demo mode nothing changes. The waits are exactly the same as before (a test proves it).
+- **Why:** with one fixed answer, every result looked identical and a visitor couldn't tell which result belonged to which review. The "Demo:" label makes it impossible to mistake the echo for a real summary. No experiment is affected: E1 and E2 never run in demo mode (D95), and the answer's text was never measured.
+- **Date:** 10 Nov 2026 · **Status:** Approved (10 Nov 2026)

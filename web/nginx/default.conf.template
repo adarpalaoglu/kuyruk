@@ -1,0 +1,50 @@
+# nginx settings for Kuyruk's web interface (the `web` service in
+# compose.yaml, D115). nginx is a small, fast web server; here it only hands
+# out the files in this folder, on port 8080 inside its container.
+#
+# This is a *template*: when the container starts, the image fills in
+# ${WEB_API_URL} (the API's address as the browser sees it, from compose)
+# and writes the result to /etc/nginx/conf.d/default.conf. nginx's own
+# $names (e.g. $uri) are not environment settings and stay as they are.
+
+server {
+    listen 8080;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+    charset utf-8;
+    charset_types application/json application/javascript text/css;
+
+    # Safety headers on every reply ("always" includes error replies):
+    # - Content-Security-Policy: the pages may load code, styles, fonts and
+    #   images only from this site, and talk only to this site and the API.
+    #   Even if someone managed to get a script into a page, it could not
+    #   send the login pass anywhere else.
+    # - nosniff: the browser must trust the file type we state.
+    # - no-referrer: addresses of these pages are never sent to other sites.
+    # - frame-ancestors 'none': other sites can't show these pages inside
+    #   their own (a trick to make people click without seeing).
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self' ${WEB_API_URL}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "no-referrer" always;
+
+    # The interface is a few small files that change only with the code:
+    # ask the browser to check for a newer copy every time.
+    expires epoch;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    # The API's address for the pages' code (js/api.js reads it), written
+    # here from WEB_API_URL so it is never typed into the pages.
+    location = /config.js {
+        default_type application/javascript;
+        return 200 'window.KUYRUK_CONFIG = { apiUrl: "${WEB_API_URL}" };\n';
+    }
+
+    # This settings file sits in the served folder; don't hand it out.
+    location ^~ /nginx/ {
+        return 404;
+    }
+}

@@ -107,6 +107,9 @@ def get_ai_backend() -> AIBackend:
         answer=settings.fake_ai_answer,
         fail_every=settings.fake_ai_fail_every,
         fail_kind=settings.fake_ai_fail_kind,
+        # In demo mode each answer echoes its own text (D125); never in the
+        # experiments, which can't run in demo mode (D95).
+        demo_words=settings.fake_ai_demo_words if settings.demo_mode else 0,
     )
 
 
@@ -115,6 +118,11 @@ class FakeAI:
 
     It exists so tests and experiments can control exactly how long the AI
     takes and when it fails, which the real AI can't do (D05).
+
+    In demo mode (`demo_words` above 0) the answer instead starts with
+    "Demo: " and repeats the text's first few words, so every result is
+    different and nobody mistakes it for a real summary (D125). The waits
+    are exactly the same either way.
     """
 
     def __init__(
@@ -127,6 +135,7 @@ class FakeAI:
         answer: str,
         fail_every: int,
         fail_kind: Literal["temporary", "permanent"],
+        demo_words: int = 0,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         """Store the behaviour; in replay mode, read the measured times now.
@@ -138,6 +147,7 @@ class FakeAI:
         self.wait_mode = wait_mode
         self.wait_seconds = wait_seconds
         self.answer = answer
+        self.demo_words = demo_words
         self.fail_every = fail_every
         self.fail_kind = fail_kind
         self.sleep = sleep
@@ -162,6 +172,8 @@ class FakeAI:
                 TemporaryAIError if self.fail_kind == "temporary" else PermanentAIError
             )
             raise error(f"Fake AI failed on purpose ({self.fail_kind}).")
+        if self.demo_words:
+            return demo_answer(text, self.demo_words)
         return self.answer
 
     def next_wait(self) -> float:
@@ -169,6 +181,17 @@ class FakeAI:
         if self.wait_mode == "replay":
             return self.random.choice(self.replay_times)
         return self.wait_seconds
+
+
+def demo_answer(text: str, words: int) -> str:
+    """The demo AI's answer: "Demo: " and the text's first `words` words (D125).
+
+    The text is the one the AI receives, so emails and phone numbers are
+    already hidden (D50). "…" marks that words were left out.
+    """
+    parts = text.split()
+    shown = " ".join(parts[:words])
+    return f"Demo: {shown}{'…' if len(parts) > words else ''}"
 
 
 def read_replay_times(path: str) -> list[float]:

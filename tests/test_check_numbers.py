@@ -156,7 +156,7 @@ def test_compare_reports_a_missing_table_and_column():
 
 def test_main_prints_each_problem_and_fails(monkeypatch, capsys):
     """Any difference ends with exit code 1 and lists every difference."""
-    monkeypatch.setattr(check_numbers, "check", lambda: (5, ["E1: one", "E2: two"]))
+    monkeypatch.setattr(check_numbers, "check", lambda **_: (5, ["E1: one", "E2: two"]))
     with pytest.raises(SystemExit) as stopped:
         check_numbers.main()
     assert stopped.value.code == 1
@@ -166,7 +166,7 @@ def test_main_prints_each_problem_and_fails(monkeypatch, capsys):
 
 def test_main_says_all_match(monkeypatch, capsys):
     """With no difference it says how many numbers it checked."""
-    monkeypatch.setattr(check_numbers, "check", lambda: (308, []))
+    monkeypatch.setattr(check_numbers, "check", lambda **_: (308, []))
     check_numbers.main()
     assert "All 308 numbers" in capsys.readouterr().out
 

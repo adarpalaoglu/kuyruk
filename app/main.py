@@ -5,13 +5,16 @@ Python functions into web addresses, called *routes*), makes sure the database
 tables exist on startup, and puts the pieces together:
 
 - the routes: sign-up and log-in (`app/auth.py`), jobs (`app/jobs.py`),
-  live progress (`app/events.py`), the budget (`app/budget.py`) and the
-  demo-mode crash button (`app/demo.py`) and the experiment-only addresses
+  live progress (`app/events.py`), the budget (`app/budget.py`), the public
+  system status (`app/status.py`), the demo-mode crash button (`app/demo.py`)
+  and the experiment-only addresses
   of E1 (`app/experiments.py`) and E2 (`app/experiments_e2.py`), both off by
   default;
 - the shared error shape for every error reply (`app/errors.py`);
 - the middleware that runs around every request (`app/middleware.py`):
-  request ID, timing log, crash safety and the request size limit.
+  request ID, timing log, crash safety and the request size limit;
+- CORS, which lets only the web interface's own pages call the API from a
+  browser (D121).
 """
 
 import logging
@@ -29,8 +32,13 @@ from app.events import router as events_router
 from app.experiments import router as experiments_router
 from app.experiments_e2 import router as experiments_e2_router
 from app.jobs import router as jobs_router
-from app.middleware import BodySizeLimitMiddleware, RequestIdMiddleware
+from app.middleware import (
+    BodySizeLimitMiddleware,
+    KuyrukCORSMiddleware,
+    RequestIdMiddleware,
+)
 from app.settings import settings
+from app.status import router as status_router
 
 # Print Kuyruk's own log lines (e.g. the timing line of every request) to the
 # console. The web server sets up only its own loggers, so without this our
@@ -61,6 +69,7 @@ app.include_router(auth_router)
 app.include_router(jobs_router)
 app.include_router(events_router)
 app.include_router(budget_router)
+app.include_router(status_router)
 app.include_router(demo_router)
 # The experiments' addresses (E1, E2) are added only when switched on (D95);
 # otherwise they are not part of Kuyruk at all, so every request to them is a
@@ -75,6 +84,22 @@ install_error_handlers(app)
 # limit's 413 replies.
 app.add_middleware(BodySizeLimitMiddleware)
 app.add_middleware(RequestIdMiddleware)
+# CORS ("cross-origin resource sharing", D121). The interface is served from
+# its own address (http://localhost:8080), and a browser lets a page read
+# replies from another address (the API, :8000) only if that address says so
+# in its reply headers. Only WEB_ORIGIN is allowed; pages from anywhere else
+# get no CORS headers, so the browser blocks them. Added last, so it is the
+# outermost layer: error replies (e.g. 413, 500) get the headers too, and the
+# interface can show their message. `allow_headers` are the headers the
+# interface sends; `expose_headers` are the reply headers its code may read.
+# A refused preflight gets Kuyruk's error shape (app/middleware.py).
+app.add_middleware(
+    KuyrukCORSMiddleware,
+    allow_origins=[settings.web_origin],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID"],
+    expose_headers=["X-Request-ID", "Retry-After", "Location"],
+)
 
 
 @app.get("/health")

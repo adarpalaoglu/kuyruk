@@ -1,6 +1,6 @@
 # Kuyruk — specification
 
-Owner and decision-maker: Adar Palaoğlu. Code: Claude Code. Last updated: 7 November 2026.
+Owner and decision-maker: Adar Palaoğlu. Code: Claude Code. Last updated: 10 November 2026.
 Reasons for every decision: `docs/decision-log.md`. Status: `docs/progress.md`.
 
 ---
@@ -114,8 +114,10 @@ Public reply models (`UserPublic`, `JobPublic`, `JobItemPublic`) expose only saf
 | GET | `/jobs/{ticket}/results` | yes | One row per text: position, original, result, state, error |
 | GET | `/jobs/{ticket}/events` | yes | Live progress (SSE) |
 | POST | `/jobs/{ticket}/cancel` | yes | Cancel |
+| POST | `/jobs/estimate` | yes | What a job would cost before sending: same checks as `POST /jobs`, tokens counted as the budget counts them; saves nothing (D119) |
 | GET | `/me/budget` | yes | Tokens used / left today |
 | GET | `/health` | no | Instant "alive" reply (E1 and Docker use it) |
+| GET | `/status` | no | API, database, worker (age of its alive file), jobs running and waiting, AI backend, demo mode, and the limits the interface shows; counts only, no names (D117, D118) |
 | POST | `/demo/crash-worker` | yes | **Demo mode only:** tells the worker to exit abruptly so recovery can be watched. Disabled (404) outside demo mode |
 
 Rules:
@@ -123,7 +125,7 @@ Rules:
 - Dependencies: `get_session` (yield) → `get_current_user` → `enforce_daily_budget` (on POST /jobs for `llm`).
 - Error shape everywhere: `{"error": {"code": "...", "message": "..."}}`. Custom handler for `budget_exceeded`. Validation errors → 422 in the same shape.
 - Middleware: request ID (in/out header `X-Request-ID`) and timing (logged; used in E1).
-- CORS: only the interface's origin is allowed. Tests: allowed origin works, another origin is blocked.
+- CORS: only the interface's origin is allowed (`WEB_ORIGIN`, D121). Tests: allowed origin works, another origin is blocked.
 
 ### 6.1 SSE event format — HAND-DESIGNED
 Events, each as JSON:
@@ -156,7 +158,7 @@ Test: two workers running against Postgres never process the same job; a killed 
 
 ## 8. Infrastructure
 
-- **Docker Compose:** `api`, `worker`, `db` (Postgres 16), `web` (interface, separate origin), each with a healthcheck; `restart: unless-stopped` on worker (needed for the crash demo). Ollama stays on the Mac; containers reach it at `host.docker.internal:11434`.
+- **Docker Compose:** `api`, `worker`, `db` (Postgres 16), `web` (interface, separate origin), each with a healthcheck; `restart: unless-stopped` on worker (needed for the crash demo). Ollama stays on the Mac; containers reach it at `host.docker.internal:11434`. `web` is nginx (unprivileged, pinned by digest) serving `web/` read-only on 127.0.0.1:8080 (D115); `api` and `worker` share a /tmp volume so `/status` can read the worker's alive file (D118).
 - **Dockerfile (production):** multi-stage, uv, slim base, good layer order (dependencies before code).
 - **Settings:** `app/settings.py` (pydantic-settings). Secrets (`JWT_SECRET`, `POSTGRES_PASSWORD`) in `.env`; `.env.example` lists names only.
 - **Demo mode:** `DEMO_MODE=true` → fake AI in replay mode, crash endpoint enabled, sample Turkish reviews available. `docker compose up` starts in demo mode by default so anyone can try it without Ollama.
@@ -208,6 +210,7 @@ Two equal ways to use Kuyruk: `/docs` for developers; the web interface for ever
 - Screens: welcome / "How it works" (diagram + three plain sentences) · sign up / log in · new job (paste or upload a file, "Try with sample Turkish reviews", choose task) · my jobs (state filter) · job page (live progress, texts waiting → working → done, plain-language status like "Summarising review 212 of 500…", cancel) · results (original beside result, download CSV/JSON) · budget meter · system status · "Behind the scenes" (the four experiment charts in plain language, "simulate a crash" button showing live recovery) · short hints on each screen.
 - Served from its own container/origin (so the CORS test is real).
 - Process: Claude (app) designs a mockup of every screen → Adar approves → Claude Code builds it after the backend is finished. Tech choice made in that slice; all versions pinned.
+- Tech (Slice 17, D115–D124): plain HTML, CSS and JavaScript with no framework and no build step; Inter self-hosted; all text in `web/i18n/en.json` and `tr.json`; story numbers from `web/data/findings.json`, generated from the CSVs and covered by the number check; the pass only in sessionStorage; live progress read with `fetch` plus the Authorization header, reconnecting with a fresh snapshot; browser tests (Playwright plus axe) against compose in demo mode, as their own CI job.
 
 ---
 

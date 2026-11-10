@@ -12,16 +12,18 @@ script imitates one (D86) and then uses Kuyruk like a visitor would:
    images this project built, never the shared Postgres image);
 3. removes anything left from an earlier check, builds the image with no
    cache (nothing reused from earlier builds), starts it with
-   `docker compose up`, and waits until all three containers are healthy;
-4. signs up, logs in, sends a job and watches its live progress to the end;
-5. sends a longer job, presses the demo crash button in the middle, and checks
+   `docker compose up`, and waits until all four containers are healthy;
+4. checks the web interface answers on its own address and that the API
+   lets only the interface's pages call it from a browser (CORS, D121);
+5. signs up, logs in, sends a job and watches its live progress to the end;
+6. sends a longer job, presses the demo crash button in the middle, and checks
    that Docker restarted the worker, the new worker took the job over
    (`recovered`), and every text still finished;
-6. prints a pass/fail line per step, then removes everything again (also
+7. prints a pass/fail line per step, then removes everything again (also
    after a failure).
 
 Run from the project folder (Docker Desktop must be running, and nothing else
-may use ports 8000 or 5432, e.g. stop the normal setup with
+may use ports 8000, 8080 or 5432, e.g. stop the normal setup with
 `docker compose stop`):
 
     uv run python scripts/clean_machine_check.py
@@ -43,6 +45,7 @@ import httpx
 
 PROJECT = "kuyruk-check"
 API = "http://localhost:8000"
+WEB = "http://localhost:8080"
 ROOT = Path(__file__).resolve().parent.parent
 
 # A few Turkish reviews, repeated to make jobs of any length.
@@ -310,11 +313,33 @@ def run(check: Check, folder: Path) -> None:
         check=False,
     )
     if not check.record(
-        up.returncode == 0, "docker compose up: db, api, worker healthy"
+        up.returncode == 0, "docker compose up: db, api, worker, web healthy"
     ):
         print(up.stdout[-3000:], up.stderr[-3000:])
         print(compose(folder, "logs", "--tail", "40", check=False).stdout)
         return
+
+    page = httpx.get(f"{WEB}/", timeout=30)
+    check.record(
+        page.status_code == 200 and "js/pages/welcome.js" in page.text,
+        "Web interface answers",
+        str(page.status_code),
+    )
+    allowed = httpx.options(
+        f"{API}/jobs",
+        headers={
+            "Origin": WEB,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        },
+        timeout=30,
+    )
+    blocked = httpx.get(f"{API}/health", headers={"Origin": "http://evil.example"})
+    check.record(
+        allowed.headers.get("access-control-allow-origin") == WEB
+        and "access-control-allow-origin" not in blocked.headers,
+        "CORS: the interface allowed, another site not",
+    )
 
     with httpx.Client(base_url=API, timeout=30) as client:
         health = client.get("/health")
@@ -338,7 +363,7 @@ def run(check: Check, folder: Path) -> None:
 def main() -> None:
     """Check the ports, run every step, always clean up, print the summary."""
     check = Check()
-    busy = [port for port in (8000, 5432) if port_in_use(port)]
+    busy = [port for port in (8000, 8080, 5432) if port_in_use(port)]
     if busy:
         check.record(
             False,

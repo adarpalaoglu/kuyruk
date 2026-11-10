@@ -1,0 +1,93 @@
+<!doctype html>
+<!-- Welcome: the problem → fix → result story of Kuyruk's four experiments
+     (docs/mockup/Main.dc.html). Every text comes from i18n/*.json and every
+     number from data/findings.json (D120); js/pages/welcome.js fills them. -->
+<html lang="en" class="loading">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kuyruk</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/style.css">
+<script src="config.js"></script>
+<script type="module" src="js/pages/welcome.js"></script>
+</head>
+<body data-page="welcome">
+<a class="skip-link" href="#main" data-i18n="header.skip"></a>
+<header class="site-header" id="site-header"></header>
+<main id="main">
+  <section class="hero">
+    <h1><span data-i18n="welcome.h1_a"></span><br><span data-i18n="welcome.h1_b"></span></h1>
+    <p class="lead" data-i18n="welcome.lead"></p>
+    <div class="hero-buttons">
+      <a class="btn btn-primary" href="#problems" data-i18n="welcome.see"></a>
+      <a class="btn btn-soft" href="login.html" id="try-link" data-i18n="welcome.try"></a>
+    </div>
+  </section>
+
+  <section id="problems" class="problems" aria-labelledby="ptitle">
+    <div class="problems-inner">
+      <h2 id="ptitle" class="section-title"><span data-i18n="welcome.problems_a"></span><br><span data-i18n="welcome.problems_b"></span></h2>
+
+      <article class="problem-card">
+        <div><p class="kicker-caps" data-i18n="welcome.problem"></p><h3 data-i18n="welcome.p1_title"></h3><p class="note" data-i18n="welcome.p1_note"></p></div>
+        <div><p class="kicker-caps" data-i18n="welcome.fix"></p><p class="fix" data-i18n="welcome.p1_fix"></p></div>
+        <div><p class="kicker-caps" data-i18n="welcome.result"></p>
+          <p class="result-number"><span data-i18n="welcome.p1_before"></span><span class="arrow"> → </span><span class="accent" data-i18n="welcome.p1_after"></span></p>
+          <p class="note" data-i18n="welcome.p1_result"></p></div>
+      </article>
+
+      <article class="problem-card">
+        <div><p class="kicker-caps" data-i18n="welcome.problem"></p><h3 data-i18n="welcome.p2_title"></h3><p class="note" data-i18n="welcome.p2_note"></p></div>
+        <div><p class="kicker-caps" data-i18n="welcome.fix"></p><p class="fix" data-i18n="welcome.p2_fix"></p></div>
+        <div><p class="kicker-caps" data-i18n="welcome.result"></p>
+          <p class="result-number accent" data-i18n="welcome.p2_big"></p>
+          <p class="note" data-i18n="welcome.p2_result"></p></div>
+      </article>
+
+      <article class="problem-card">
+        <div><p class="kicker-caps" data-i18n="welcome.problem"></p><h3 data-i18n="welcome.p3_title"></h3><p class="note" data-i18n="welcome.p3_note"></p></div>
+        <div><p class="kicker-caps" data-i18n="welcome.fix"></p><p class="fix" data-i18n="welcome.p3_fix"></p></div>
+        <div><p class="kicker-caps" data-i18n="welcome.result"></p>
+          <p class="result-number"><span class="accent" data-i18n="welcome.p3_big"></span><span data-i18n="welcome.p3_big_rest"></span></p>
+          <p class="note" data-i18n="welcome.p3_result"></p></div>
+      </article>
+
+      <article class="problem-card">
+        <div><p class="kicker-caps" data-i18n="welcome.problem"></p><h3 data-i18n="welcome.p4_title"></h3><p class="note" data-i18n="welcome.p4_note"></p></div>
+        <div><p class="kicker-caps" data-i18n="welcome.fix"></p><p class="fix" data-i18n="welcome.p4_fix"></p></div>
+        <div><p class="kicker-caps" data-i18n="welcome.result"></p>
+          <p class="result-number accent" data-i18n="welcome.p4_big"></p>
+          <p class="note" data-i18n="welcome.p4_result"></p></div>
+      </article>
+
+      <p class="more-link"><a href="experiments.html" data-i18n="welcome.measured"></a></p>
+    </div>
+  </section>
+
+  <section class="how" aria-labelledby="how">
+    <div class="how-head">
+      <h2 id="how" class="section-title" data-i18n="welcome.how_title"></h2>
+      <p data-i18n="welcome.how_lead"></p>
+    </div>
+    <ol class="how-steps">
+      <li><strong data-i18n="welcome.s1_title"></strong><span data-i18n="welcome.s1_text"></span></li>
+      <li><strong data-i18n="welcome.s2_title"></strong><span data-i18n="welcome.s2_text"></span></li>
+      <li><strong data-i18n="welcome.s3_title"></strong><span data-i18n="welcome.s3_text"></span></li>
+    </ol>
+  </section>
+
+  <section class="band-dark cta-band" aria-labelledby="cta">
+    <div class="cta-inner">
+      <h2 id="cta" class="section-title" data-i18n="welcome.cta_title"></h2>
+      <p class="lead-dark" data-i18n="welcome.cta_text"></p>
+      <a class="btn btn-white" href="experiments.html#crash" data-i18n="welcome.cta_button"></a>
+    </div>
+  </section>
+</main>
+<footer class="site-footer">
+  <span data-i18n="welcome.footer"></span>
+  <a href="https://github.com/adarpalaoglu/kuyruk" data-i18n="welcome.github"></a>
+</footer>
+</body>
+</html>

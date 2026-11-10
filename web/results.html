@@ -1,0 +1,41 @@
+<!doctype html>
+<!-- Results (docs/mockup/Results.dc.html): each original text beside its
+     result, failed ones marked, Download CSV / JSON (GET /jobs/{ticket} and
+     /results). js/pages/results.js. -->
+<html lang="en" class="loading">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kuyruk</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/style.css">
+<script src="config.js"></script>
+<script type="module" src="js/pages/results.js"></script>
+</head>
+<body data-page="results">
+<a class="skip-link" href="#main" data-i18n="header.skip"></a>
+<header class="site-header" id="site-header"></header>
+<main id="main" class="results-main">
+  <p class="message" id="results-error" role="alert" hidden></p>
+  <div class="results-head" id="results-head" hidden>
+    <div>
+      <p id="kicker"></p>
+      <h1 class="page-title" id="headline"></h1>
+      <p class="sub" id="sub"></p>
+    </div>
+    <div class="downloads">
+      <button type="button" class="btn btn-primary btn-small" id="csv" data-i18n="results.csv"></button>
+      <button type="button" class="btn btn-soft btn-small" id="json" data-i18n="results.json" data-i18n-aria="results.json_label"></button>
+    </div>
+  </div>
+  <div class="results-table" id="results-table" role="table" hidden>
+    <div class="results-row head" role="row">
+      <span role="columnheader" data-i18n="results.col_n"></span>
+      <span role="columnheader" data-i18n="results.col_original"></span>
+      <span role="columnheader" class="result-head" id="col-result"></span>
+    </div>
+    <div id="rows" role="rowgroup"></div>
+  </div>
+</main>
+</body>
+</html>

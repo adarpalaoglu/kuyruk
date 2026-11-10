@@ -33,6 +33,13 @@ dev = [
 bench = [
     "matplotlib==3.11.2",
 ]
+# Needed only for the browser tests of the web interface (tests/browser/) and
+# the screenshots (scripts/screenshots.py): Playwright drives a real browser.
+# Not installed by `uv sync` or the image; use `uv run --group browser ...`
+# (D123).
+browser = [
+    "playwright==1.64.1",
+]
 
 [tool.ruff]
 line-length = 88
@@ -49,4 +56,9 @@ testpaths = ["tests"]
 addopts = "--cov=app --cov-report=term-missing --cov-fail-under=85"
 # Tests marked `postgres` need a real Postgres database (POSTGRES_TEST_URL);
 # they are skipped when it isn't set. Run only them with `pytest -m postgres`.
-markers = ["postgres: needs a real Postgres database (set POSTGRES_TEST_URL)"]
+# Tests marked `browser` drive a real browser against `docker compose up`
+# (KUYRUK_WEB_URL); they are skipped when it isn't set.
+markers = [
+    "postgres: needs a real Postgres database (set POSTGRES_TEST_URL)",
+    "browser: needs the running interface (set KUYRUK_WEB_URL) and Playwright",
+]

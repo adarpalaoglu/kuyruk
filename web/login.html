@@ -1,0 +1,35 @@
+<!doctype html>
+<!-- Sign up / log in (docs/mockup/Login.dc.html): one form for both, using
+     POST /register and POST /token. js/pages/login.js does the work. -->
+<html lang="en" class="loading">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kuyruk</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/style.css">
+<script src="config.js"></script>
+<script type="module" src="js/pages/login.js"></script>
+</head>
+<body data-page="login">
+<a class="skip-link" href="#main" data-i18n="header.skip"></a>
+<header class="site-header" id="site-header"></header>
+<main id="main" class="narrow">
+  <div class="page-head">
+    <h1 id="login-title"></h1>
+    <p id="login-sub"></p>
+  </div>
+  <p class="message" id="login-note" role="status" hidden></p>
+  <form class="form" id="login-form" novalidate>
+    <label for="username" class="sr-only" data-i18n="login.username"></label>
+    <input class="input" id="username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required aria-describedby="userhint" data-i18n-placeholder="login.username">
+    <label for="password" class="sr-only" data-i18n="login.password"></label>
+    <input class="input" id="password" name="password" type="password" autocomplete="new-password" required aria-describedby="userhint" data-i18n-placeholder="login.password">
+    <p class="hint" id="userhint"></p>
+    <p class="message" id="login-error" role="alert" hidden></p>
+    <button class="btn btn-primary" type="submit" id="login-submit"></button>
+  </form>
+  <p class="switch-line"><span id="switch-text"></span> <button type="button" id="switch-mode"></button></p>
+</main>
+</body>
+</html>

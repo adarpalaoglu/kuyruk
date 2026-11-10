@@ -1,0 +1,35 @@
+<!doctype html>
+<!-- My jobs (docs/mockup/Jobs.dc.html): your jobs, newest first, with a
+     state filter and "Show more" (GET /jobs?status=&limit=&offset=).
+     js/pages/jobs.js. -->
+<html lang="en" class="loading">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kuyruk</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/style.css">
+<script src="config.js"></script>
+<script type="module" src="js/pages/jobs.js"></script>
+</head>
+<body data-page="jobs">
+<a class="skip-link" href="#main" data-i18n="header.skip"></a>
+<header class="site-header" id="site-header"></header>
+<main id="main" class="list-main">
+  <div class="list-head">
+    <h1 class="page-title" data-i18n="jobs.title"></h1>
+    <div class="filters" role="group" id="filters" data-i18n-aria="jobs.filter_group">
+      <button type="button" data-state="" aria-pressed="true" data-i18n="jobs.all"></button>
+      <button type="button" data-state="queued" aria-pressed="false" data-i18n="state.queued"></button>
+      <button type="button" data-state="running" aria-pressed="false" data-i18n="state.running"></button>
+      <button type="button" data-state="done" aria-pressed="false" data-i18n="state.done"></button>
+      <button type="button" data-state="failed" aria-pressed="false" data-i18n="state.failed"></button>
+      <button type="button" data-state="cancelled" aria-pressed="false" data-i18n="state.cancelled"></button>
+    </div>
+  </div>
+  <p class="message" id="jobs-error" role="alert" hidden></p>
+  <ul class="job-list" id="job-list" aria-live="polite"></ul>
+  <button type="button" class="btn btn-soft btn-small show-more" id="more" hidden data-i18n="jobs.more"></button>
+</main>
+</body>
+</html>

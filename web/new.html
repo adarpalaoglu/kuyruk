@@ -1,0 +1,45 @@
+<!doctype html>
+<!-- New job (docs/mockup/NewJob.dc.html): choose the task, paste or upload
+     texts, see the cost, send. POST /jobs/estimate for the cost line,
+     POST /jobs (with an Idempotency-Key) to send. js/pages/new.js. -->
+<html lang="en" class="loading">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kuyruk</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/style.css">
+<script src="config.js"></script>
+<script type="module" src="js/pages/new.js"></script>
+</head>
+<body data-page="new">
+<a class="skip-link" href="#main" data-i18n="header.skip"></a>
+<header class="site-header" id="site-header"></header>
+<main id="main" class="new-main">
+  <h1 class="page-title" data-i18n="new.title"></h1>
+  <fieldset class="segmented" id="task">
+    <legend class="sr-only" data-i18n="new.task_group"></legend>
+    <label><input type="radio" name="task" value="normalise"><span data-i18n="task.normalise"></span></label>
+    <label><input type="radio" name="task" value="count_tokens"><span data-i18n="task.count_tokens"></span></label>
+    <label><input type="radio" name="task" value="llm" checked><span data-i18n="task.llm"></span></label>
+  </fieldset>
+  <p class="task-note" id="task-note"></p>
+
+  <label for="textbox" class="sr-only" data-i18n="new.box_label"></label>
+  <textarea id="textbox" class="textbox" rows="12" aria-describedby="cost-line" data-i18n-placeholder="new.placeholder"></textarea>
+
+  <div class="new-tools">
+    <span id="cost-line" aria-live="polite"></span>
+    <span class="tool-buttons">
+      <button type="button" class="link-button" id="samples" data-i18n="new.samples"></button>
+      <button type="button" class="link-button" id="upload" data-i18n="new.upload"></button>
+      <input type="file" id="file" class="sr-only" tabindex="-1" accept=".txt,.csv,.json,text/plain,text/csv,application/json" data-i18n-aria="new.upload_label">
+    </span>
+  </div>
+  <p class="message" id="upload-note" role="status" hidden></p>
+  <p class="message" id="send-error" role="alert" hidden></p>
+
+  <button type="button" class="btn btn-primary send-button" id="send"></button>
+</main>
+</body>
+</html>

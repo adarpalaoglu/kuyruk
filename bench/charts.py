@@ -64,6 +64,10 @@ Turkish vs English cost (Slice 15, spec 9.5), from `cost_tokens.csv` made by
 
 And its key numbers (sum ratio, median per review, tokens per word).
 
+Last, it writes the web interface's story numbers and sample reviews
+(`web/data/findings.json`, `sample_reviews.json`) from the same CSV files
+(`bench/web_data.py`, D120).
+
 matplotlib (the charting library) is in the separate `bench` dependency group,
 so Kuyruk itself, its tests and its Docker image don't need it. Run:
 
@@ -82,7 +86,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402 (must come after the line above)
 
-from bench import cost_sums  # noqa: E402 (shared sums; loads nothing from app/)
+from bench import cost_sums, web_data  # noqa: E402 (load nothing from app/)
 
 DATA = Path(__file__).parent / "data"
 CHARTS = Path(__file__).parent.parent / "docs" / "charts"
@@ -1318,6 +1322,8 @@ def main() -> None:
     e4_charts()
     cost_charts()
     print(f"Charts written to {CHARTS}.")
+    # The interface's story numbers come from the same CSV files (D120).
+    web_data.main()
 
 
 if __name__ == "__main__":

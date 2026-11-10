@@ -12,6 +12,13 @@ what the document says.
 It checks only the Results tables and those sentences. Numbers in ordinary
 prose, in "Surprises" and in the "My prediction, part by part" verdict
 tables are not checked: they are worded freely and judged by hand.
+
+It also checks the web interface's story numbers (Slice 17, D120):
+`web/data/findings.json` and `web/data/sample_reviews.json` must equal a
+fresh computation from the CSV files (`bench/web_data.py`); the pages and
+their language files must contain no number typed by hand (every number is a
+{slot} filled from those files); and the few measured facts the pages say in
+words (e.g. "under half a second") must still be true of the data.
 A difference is reported, never fixed: after a real rerun, the write-up and
 the verdicts must be updated by a person (D114).
 
@@ -24,6 +31,8 @@ It is also run by `uv run --group bench python -m bench.run_all --charts-only`.
 """
 
 import csv
+import html.parser
+import json
 import re
 import statistics
 import sys
@@ -31,11 +40,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from bench import cost_sums
+from bench import cost_sums, web_data
 
 ROOT = Path(__file__).parent.parent
 DOC = ROOT / "docs" / "experiments.md"
 DATA = Path(__file__).parent / "data"
+WEB = ROOT / "web"
 
 MB = 1_000_000  # Docker counts sizes in decimal megabytes, as the doc does
 DASH = "–"  # the doc writes spreads with an en dash: "5.5 (5.4–5.6)"
@@ -1012,8 +1022,164 @@ CHECKS: dict[str, Callable[[Path], list[Expected]]] = {
 }
 
 
-def check(doc: Path = DOC, data: Path = DATA) -> tuple[int, list[str]]:
-    """Compare the doc with the data: (how many numbers checked, what differs)."""
+# ---- The web interface's story numbers (D120) --------------------------------
+
+# Digits the pages may contain although they are not measurements: names and
+# labels. Everything else with a digit must be a {slot}.
+ALLOWED_DIGITS = [
+    r"Experiment \d",  # "Experiment 1 · The freeze"
+    r"Deney \d",
+    r"Gemma 4 E4B",  # the model's name
+]
+
+# Measured facts the pages say in words, with what must hold in the data.
+WORD_CLAIMS: list[tuple[str, Callable[[dict, Path], bool]]] = [
+    (
+        'E4 "Downloading took under half a second"',
+        lambda found, data: found["e4_download_s"] < 0.5,
+    ),
+    (
+        'E4 "half with the cache and half without"',
+        lambda found, data: (
+            sum(
+                r["cache"] == "on" and not r["error"] and r["job_s"] != ""
+                for r in read(data, "e4_runs.csv")
+            )
+            * 2
+            == found["e4_runs"]
+        ),
+    ),
+    ('E3 "Built five versions"', lambda found, data: found["e3_versions"] == 5),
+    (
+        'E3 "on two different machines"',
+        lambda found, data: (
+            {r["environment"] for r in read(data, "e3_builds.csv")}
+            | {r["environment"] for r in read(data, "e3_builds_ci.csv")}
+            == {"mac", "ci"}
+        ),
+    ),
+    (
+        'E1 "Wrote the same step three ways"',
+        lambda found, data: (
+            {r["mode"] for r in read(data, "e1_runs.csv") if r["kind"] == "sleep"}
+            == {"A", "B", "C"}
+        ),
+    ),
+    (
+        'E2 "Never finished, the usual way"',
+        lambda found, data: found["e2_broken_never_finished"] is True,
+    ),
+]
+
+
+# Attributes whose values people see or hear (a tooltip, a screen reader's
+# label, a box's hint): a number there would go stale like visible text.
+READ_ATTRIBUTES = {"alt", "title", "aria-label", "placeholder", "value", "label"}
+
+
+class PageText(html.parser.HTMLParser):
+    """Collect what a person reads or hears on an HTML page.
+
+    That is the visible text plus the attributes in READ_ATTRIBUTES; tags,
+    other attributes (sizes, addresses) and code are left out.
+    """
+
+    def __init__(self) -> None:
+        """Start with nothing collected and outside any script or style."""
+        super().__init__()
+        self.parts: list[str] = []
+        self.skipping = 0
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        """Keep read attributes; note entering a script or style block."""
+        self.parts += [v for k, v in attrs if k in READ_ATTRIBUTES and v]
+        if tag in ("script", "style"):
+            self.skipping += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        """Note when leaving a script or style block."""
+        if tag in ("script", "style"):
+            self.skipping -= 1
+
+    def handle_data(self, data: str) -> None:
+        """Keep text outside script and style blocks."""
+        if not self.skipping:
+            self.parts.append(data)
+
+
+def strings_in(value) -> list[str]:
+    """Every text in a language file (the values, not the key names)."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [text for item in value.values() for text in strings_in(item)]
+    return []
+
+
+def typed_numbers(text: str) -> list[str]:
+    """The digits in `text` that are neither in a {slot} nor allowed."""
+    text = re.sub(r"\{\w+\}", "", text)
+    for allowed in ALLOWED_DIGITS:
+        text = re.sub(allowed, "", text)
+    return re.findall(r"\S*\d\S*", text)
+
+
+def check_interface(data: Path = DATA, web: Path = WEB) -> tuple[int, list[str]]:
+    """Check the interface's numbers: (how many checks, what differs)."""
+    problems: list[str] = []
+    checked = 0
+    fresh = web_data.findings(data)
+    try:
+        saved = json.loads((web / "data" / "findings.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        saved = {}
+    for key in sorted(set(fresh) | set(saved)):
+        checked += 1
+        if saved.get(key) != fresh.get(key):
+            problems.append(
+                f"Interface: findings.json says {key} = {saved.get(key)}, "
+                f"the data gives {fresh.get(key)} (run bench.web_data)"
+            )
+    checked += 1
+    try:
+        samples = json.loads(
+            (web / "data" / "sample_reviews.json").read_text(encoding="utf-8")
+        )
+    # A missing or broken file is a difference to report, not a crash (D114).
+    except (OSError, ValueError):
+        samples = None
+    if samples != web_data.sample_reviews(data):
+        problems.append("Interface: sample_reviews.json doesn't match reviews_tr.csv")
+    for page in sorted(web.glob("*.html")):
+        parser = PageText()
+        parser.feed(page.read_text(encoding="utf-8"))
+        checked += 1
+        for number in typed_numbers(" ".join(parser.parts)):
+            problems.append(f"Interface: {page.name} has a typed number: {number}")
+    for words in sorted((web / "i18n").glob("*.json")):
+        texts = strings_in(json.loads(words.read_text(encoding="utf-8")))
+        checked += 1
+        for text in texts:
+            for number in typed_numbers(text):
+                problems.append(
+                    f"Interface: i18n/{words.name} has a typed number: {number} "
+                    f'(in "{text[:60]}")'
+                )
+    for claim, holds in WORD_CLAIMS:
+        checked += 1
+        if not holds(fresh, data):
+            problems.append(f"Interface: {claim} is no longer true of the data")
+    return checked, problems
+
+
+def check(
+    doc: Path = DOC, data: Path = DATA, web: Path | None = None
+) -> tuple[int, list[str]]:
+    """Compare the doc with the data: (how many numbers checked, what differs).
+
+    With `web` (the interface's folder), the interface's numbers are checked
+    too (`check_interface`).
+    """
     found = sections(doc.read_text(encoding="utf-8"))
     checked = 0
     problems: list[str] = []
@@ -1035,18 +1201,25 @@ def check(doc: Path = DOC, data: Path = DATA) -> tuple[int, list[str]]:
             continue
         checked += len(expected)
         problems += compare(found[key], expected)
+    if web is not None:
+        more, interface_problems = check_interface(data, web)
+        checked += more
+        problems += interface_problems
     return checked, problems
 
 
 def main() -> None:
     """Print whether every number matches; exit code 1 if any differs."""
-    checked, problems = check()
+    checked, problems = check(web=WEB)
     if not problems:
-        print(f"All {checked} numbers in docs/experiments.md match the CSV files.")
+        print(
+            f"All {checked} numbers in docs/experiments.md and the interface "
+            "match the CSV files."
+        )
         return
     print(
-        f"{len(problems)} of {checked} numbers in docs/experiments.md differ "
-        "from the CSV files:"
+        f"{len(problems)} of {checked} numbers in docs/experiments.md and the "
+        "interface differ from the CSV files:"
     )
     for problem in problems:
         print(f"- {problem}")

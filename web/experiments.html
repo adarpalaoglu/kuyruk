@@ -1,0 +1,122 @@
+<!doctype html>
+<!-- The experiments: one finding per experiment, problem → fix → measured result, and the "Simulate a crash" button (docs/mockup/Behind.dc.html). Numbers come from data/findings.json (D120). -->
+<html lang="en" class="loading">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kuyruk</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/style.css">
+<script src="config.js"></script>
+<script type="module" src="js/pages/experiments.js"></script>
+</head>
+<body data-page="experiments">
+<a class="skip-link" href="#main" data-i18n="header.skip"></a>
+<header class="site-header" id="site-header"></header>
+<main id="main">
+  <section class="exp-hero">
+    <h1 data-i18n="experiments.h1"></h1>
+    <p data-i18n="experiments.lead"></p>
+  </section>
+
+  <section class="exp band" aria-labelledby="e1">
+    <div class="exp-inner">
+      <div class="exp-head">
+        <p class="exp-kicker" data-i18n="experiments.e1_kicker"></p>
+        <h2 id="e1" data-i18n="experiments.e1_title"></h2>
+      </div>
+      <div class="exp-columns">
+        <div><p class="kicker-caps" data-i18n="experiments.never_notice"></p><p data-i18n="experiments.e1_never"></p></div>
+        <div><p class="kicker-caps" data-i18n="experiments.what_we_did"></p><p data-i18n="experiments.e1_did"></p></div>
+        <div><p class="kicker-caps" data-i18n="experiments.fix"></p><p data-i18n="experiments.e1_fix"></p></div>
+      </div>
+      <div class="big-pair">
+        <div><p class="big" data-i18n="experiments.e1_bad"></p><p class="big-caption" data-i18n="experiments.e1_bad_caption"></p></div>
+        <div><p class="big accent" data-i18n="experiments.e1_good"></p><p class="big-caption" data-i18n="experiments.e1_good_caption"></p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="exp" aria-labelledby="e2">
+    <div class="exp-inner">
+      <div class="exp-head">
+        <p class="exp-kicker" data-i18n="experiments.e2_kicker"></p>
+        <h2 id="e2" data-i18n="experiments.e2_title"></h2>
+      </div>
+      <div class="exp-columns">
+        <div><p class="kicker-caps" data-i18n="experiments.never_notice"></p><p data-i18n="experiments.e2_never"></p></div>
+        <div><p class="kicker-caps" data-i18n="experiments.what_we_did"></p><p data-i18n="experiments.e2_did"></p></div>
+        <div><p class="kicker-caps" data-i18n="experiments.fix"></p><p data-i18n="experiments.e2_fix"></p></div>
+      </div>
+      <div class="big-pair">
+        <div><p class="big" data-i18n="experiments.e2_bad"></p><p class="big-caption" data-i18n="experiments.e2_bad_caption"></p></div>
+        <div><p class="big accent" data-i18n="experiments.e2_good"></p><p class="big-caption" data-i18n="experiments.e2_good_caption"></p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="exp band" aria-labelledby="e3">
+    <div class="exp-inner">
+      <div class="exp-head">
+        <p class="exp-kicker" data-i18n="experiments.e3_kicker"></p>
+        <h2 id="e3" data-i18n="experiments.e3_title"></h2>
+      </div>
+      <div class="exp-columns">
+        <div><p class="kicker-caps" data-i18n="experiments.never_notice"></p><p data-i18n="experiments.e3_never"></p></div>
+        <div><p class="kicker-caps" data-i18n="experiments.what_we_did"></p><p data-i18n="experiments.e3_did"></p></div>
+        <div><p class="kicker-caps" data-i18n="experiments.surprise"></p><p data-i18n="experiments.e3_surprise"></p></div>
+      </div>
+      <div class="big-pair">
+        <div><p class="big"><span class="accent" data-i18n="experiments.e3_small"></span></p><p class="big-caption" data-i18n="experiments.e3_small_caption"></p></div>
+        <div><p class="big"><span class="accent" data-i18n="experiments.e3_fast"></span></p><p class="big-caption" data-i18n="experiments.e3_fast_caption"></p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="exp" aria-labelledby="e4">
+    <div class="exp-inner">
+      <div class="exp-head">
+        <p class="exp-kicker" data-i18n="experiments.e4_kicker"></p>
+        <h2 id="e4" data-i18n="experiments.e4_title"></h2>
+      </div>
+      <div class="exp-columns">
+        <div><p class="kicker-caps" data-i18n="experiments.never_notice"></p><p data-i18n="experiments.e4_never"></p></div>
+        <div><p class="kicker-caps" data-i18n="experiments.what_we_did"></p><p data-i18n="experiments.e4_did"></p></div>
+        <div><p class="kicker-caps" data-i18n="experiments.lesson"></p><p data-i18n="experiments.e4_lesson"></p></div>
+      </div>
+      <div class="big-pair">
+        <div><p class="big" data-i18n="experiments.e4_on"></p><p class="big-caption" data-i18n="experiments.e4_on_caption"></p></div>
+        <div><p class="big" data-i18n="experiments.e4_off"></p><p class="big-caption" data-i18n="experiments.e4_off_caption"></p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cost" aria-labelledby="cost">
+    <div class="cost-inner">
+      <p class="exp-kicker" data-i18n="experiments.cost_kicker"></p>
+      <h2 id="cost" data-i18n="experiments.cost_title"></h2>
+      <p class="big accent" data-i18n="experiments.cost_big"></p>
+      <p class="cost-note" data-i18n="experiments.cost_note"></p>
+    </div>
+  </section>
+
+  <section id="crash" class="band-dark crash" aria-labelledby="crashtitle">
+    <div class="crash-inner">
+      <h2 id="crashtitle" data-i18n="experiments.crash_title"></h2>
+      <p class="lead-dark" data-i18n="experiments.crash_lead"></p>
+      <button type="button" class="btn-white crash-button" id="crash-button" data-i18n="experiments.crash_button"></button>
+      <p class="crash-message" id="crash-message" role="status" aria-live="polite" hidden></p>
+      <ol class="crash-steps" id="crash-steps">
+        <li class="is-lit"><span class="when" id="when-1" data-i18n="experiments.crash_t1"></span><strong data-i18n="experiments.crash_s1_title"></strong><span class="what" data-i18n="experiments.crash_s1_text"></span></li>
+        <li><span class="when" id="when-2" data-i18n="experiments.crash_t2"></span><strong data-i18n="experiments.crash_s2_title"></strong><span class="what" data-i18n="experiments.crash_s2_text"></span></li>
+        <li><span class="when" id="when-3" data-i18n="experiments.crash_t3"></span><strong data-i18n="experiments.crash_s3_title"></strong><span class="what" data-i18n="experiments.crash_s3_text"></span></li>
+      </ol>
+    </div>
+  </section>
+
+  <footer class="exp-footer">
+    <span data-i18n="experiments.footer"></span> <a href="https://github.com/adarpalaoglu/kuyruk/blob/main/docs/experiments.md" data-i18n="experiments.footer_link"></a>
+  </footer>
+</main>
+</body>
+</html>

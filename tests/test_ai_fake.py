@@ -172,6 +172,45 @@ def test_switch_gives_the_fake_ai(monkeypatch):
     assert backend.fail_every == 4
 
 
+def test_switch_gives_the_fixed_answer_outside_demo_mode(monkeypatch):
+    monkeypatch.setattr(ai.settings, "ai_backend", "fake")
+    monkeypatch.setattr(ai.settings, "demo_mode", False)
+    assert get_ai_backend().demo_words == 0
+
+
+def test_switch_gives_the_demo_answer_in_demo_mode(monkeypatch):
+    monkeypatch.setattr(ai.settings, "ai_backend", "fake")
+    monkeypatch.setattr(ai.settings, "demo_mode", True)
+    monkeypatch.setattr(ai.settings, "fake_ai_demo_words", 3)
+    assert get_ai_backend().demo_words == 3
+
+
+async def test_demo_answer_starts_with_demo_and_the_texts_first_words():
+    waits = RecordedWaits()
+    fake = make_fake(demo_words=6, sleep=waits)
+    answer = await fake.summarise(
+        "Kargo çok hızlı geldi, paketleme özenliydi, ürün fotoğraftaki gibi."
+    )
+    assert answer == "Demo: Kargo çok hızlı geldi, paketleme özenliydi,…"
+    assert await fake.summarise("Fena değil.") == "Demo: Fena değil."
+    # The waits are exactly those of the plain fake AI.
+    assert waits == [0.5, 0.5]
+
+
+async def test_demo_answers_differ_per_text_but_wait_the_same_as_replay():
+    plain = make_fake(wait_mode="replay", sleep=RecordedWaits())
+    demo = make_fake(wait_mode="replay", demo_words=6, sleep=RecordedWaits())
+    for text in ["bir", "iki üç", "dört beş altı"]:
+        await plain.summarise(text)
+        await demo.summarise(text)
+    assert plain.sleep == demo.sleep
+
+
+def test_demo_answer_marks_left_out_words():
+    assert ai.demo_answer("a b c", 2) == "Demo: a b…"
+    assert ai.demo_answer("  a   b  ", 2) == "Demo: a b"
+
+
 def test_switch_gives_the_ollama_ai(monkeypatch):
     monkeypatch.setattr(ai.settings, "ai_backend", "ollama")
     monkeypatch.setattr(ai.settings, "ollama_model", "gemma4:e4b")

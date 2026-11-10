@@ -21,3 +21,6 @@ htmlcov/
 
 # OS
 .DS_Store
+
+# Pictures of failed browser tests (tests/browser).
+browser-failures/

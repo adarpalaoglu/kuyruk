@@ -13,8 +13,10 @@ what a reply about a user may show (`UserPublic`), what a successful login
 returns (`Token`), what a new job must contain (`JobCreate`, with the job
 limits), what a reply about a job or one of its texts may show
 (`JobPublic`, `JobItemPublic`), and what the daily budget page shows
-(`BudgetPublic`). These are not tables; they only describe data going in and
-out of the API, so internal fields can never leak out.
+(`BudgetPublic`), what a cost estimate for a job shows (`EstimatePublic`)
+and what the public system status shows (`StatusPublic` and its parts).
+These are not tables; they only describe data going in and out of the API,
+so internal fields can never leak out.
 
 The fields follow `docs/spec.md` section 5; the allowed states follow section 4.
 Rules about which state may follow which are added in the worker slices, not
@@ -487,3 +489,82 @@ class BudgetPublic(SQLModel):
     used: int
     left: int
     resets_at: datetime
+
+
+class EstimatePublic(SQLModel):
+    """The reply of POST /jobs/estimate: what a job would cost, before sending.
+
+    `texts` is how many texts the job has. `tokens_needed` is counted exactly
+    as the budget counts it when the job is sent (D57), or None for the free
+    tasks (cleaning and counting, D11). `left_today` is what the user can
+    still send today. Nothing is saved or reserved (D119), so by the time the
+    job is sent the numbers can be slightly out of date.
+    """
+
+    texts: int
+    tokens_needed: int | None
+    left_today: int
+
+
+class WorkerStatus(SQLModel):
+    """The worker's part of GET /status.
+
+    `state` is "ok" while the worker's "I'm alive" file is fresh, "down" when
+    it is older than WORKER_ALIVE_MAX_AGE_SECONDS, and "unknown" when the API
+    can't see the file (no shared folder, e.g. outside Docker) (D118).
+    `last_seen_seconds` is the file's age, or None when unknown.
+    """
+
+    state: Literal["ok", "down", "unknown"]
+    last_seen_seconds: float | None
+
+
+class AiStatus(SQLModel):
+    """The AI's part of GET /status: which AI the `llm` task uses.
+
+    `backend` is "fake" or "ollama"; `wait_mode` is the fake AI's way of
+    waiting ("fixed" or "replay", None for the real AI); `model` is the real
+    model's name, which the fake AI's replayed times were measured on.
+    """
+
+    backend: Literal["fake", "ollama"]
+    wait_mode: Literal["fixed", "replay"] | None
+    model: str
+
+
+class LimitsPublic(SQLModel):
+    """The adjustable numbers the interface shows, from app/settings.py.
+
+    They are sent with the status so the interface never types a limit by
+    hand: if a setting changes, every screen follows.
+    """
+
+    min_texts_per_job: int
+    max_texts_per_job: int
+    max_text_chars: int
+    username_min_length: int
+    username_max_length: int
+    password_min_length: int
+    texts_at_once: int
+    max_tries_per_text: int
+    heartbeat_seconds: float
+    stale_after_seconds: float
+    jobs_page_default: int
+
+
+class StatusPublic(SQLModel):
+    """The reply of GET /status: is every part of Kuyruk working right now?
+
+    Public (no login), so it shows only counts and settings, never a user
+    name or a ticket (D117). `database` is "down" when a tiny query fails;
+    the job counts are then None.
+    """
+
+    api: Literal["ok"]
+    database: Literal["ok", "down"]
+    worker: WorkerStatus
+    running_jobs: int | None
+    jobs_waiting: int | None
+    ai: AiStatus
+    demo_mode: bool
+    limits: LimitsPublic

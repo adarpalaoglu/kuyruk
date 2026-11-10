@@ -6,6 +6,8 @@
 - `GET /jobs/{ticket}` shows one job; `GET /jobs` lists your own jobs;
   `GET /jobs/{ticket}/results` shows one row per text.
 - `POST /jobs/{ticket}/cancel` cancels a job that hasn't finished yet.
+- `POST /jobs/estimate` says what a job would cost before it is sent (the
+  interface's cost line, D119); it saves nothing.
 
 `POST /jobs` also checks the daily AI budget for `llm` jobs
 (`enforce_daily_budget` below, with the budget rules in `app/budget.py`).
@@ -29,9 +31,11 @@ from app.budget import (
     check_too_big,
     lock_user,
     tokens_for_job,
+    tokens_used_today,
 )
 from app.errors import ApiError
 from app.models import (
+    EstimatePublic,
     Job,
     JobCreate,
     JobItem,
@@ -263,6 +267,31 @@ def create_job(
         ensure_same_content(session, job, new_job)
     response.headers["Location"] = f"/jobs/{job.id}"
     return job
+
+
+@router.post("/jobs/estimate", response_model=EstimatePublic)
+def estimate_job(
+    new_job: JobCreate, session: SessionDep, user: CurrentUser
+) -> EstimatePublic:
+    """Say what a job would cost, without sending it (D119).
+
+    Same body and the same checks as `POST /jobs` (so a broken job gets the
+    same 422 here, before the user presses Send), and the tokens are counted
+    exactly as the budget counts them (`tokens_for_job`, D57). A job bigger
+    than a whole day's budget gets the same 422 as on sending (D62). Nothing
+    is saved and nothing is locked or reserved, so the numbers can be
+    slightly out of date by the time the job is really sent; the real check
+    happens then.
+    """
+    used = tokens_used_today(session, user, utc_now())
+    left = max(settings.daily_token_budget - used, 0)
+    needed = None
+    if new_job.task == Task.LLM:
+        needed = tokens_for_job(new_job.texts)
+        check_too_big(needed)
+    return EstimatePublic(
+        texts=len(new_job.texts), tokens_needed=needed, left_today=left
+    )
 
 
 @router.get("/jobs", response_model=list[JobPublic])

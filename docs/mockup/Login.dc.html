@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kuyruk – Sign up or log in</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#2347D6}a:hover{color:#1A36A8}
+</style>
+</helmet>
+<div style="font-family: Inter, system-ui, sans-serif; color: #1D1D1F; background: #FFFFFF; min-height: 100vh">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 22px 40px">
+    <a href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #1D1D1F; font-weight: 600; font-size: 18px; letter-spacing: -0.01em">
+      <svg width="22" height="22" viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="5" width="24" height="4" rx="2" fill="#1D1D1F"></rect><rect x="2" y="12" width="17" height="4" rx="2" fill="#1D1D1F" opacity="0.55"></rect><rect x="2" y="19" width="10" height="4" rx="2" fill="#1D1D1F" opacity="0.25"></rect></svg>
+      Kuyruk
+      <span style="font-size: 11px; font-weight: 600; color: #6E6E73; border: 1px solid #D2D2D7; border-radius: 999px; padding: 2px 8px; letter-spacing: 0.02em">DEMO</span>
+    </a>
+    <button type="button" aria-label="Language: English. Switch to Turkish" style="font: inherit; font-size: 14px; color: #6E6E73; background: none; border: 0; padding: 10px 4px; min-height: 44px">TR</button>
+  </header>
+
+  <main style="max-width: 400px; margin: 0 auto; padding: 96px 32px 120px; display: flex; flex-direction: column; gap: 36px">
+    <div style="display: flex; flex-direction: column; gap: 10px; text-align: center">
+      <h1 style="margin: 0; font-size: 40px; font-weight: 700; letter-spacing: -0.03em">Create your account.</h1>
+      <p style="margin: 0; font-size: 17px; color: #6E6E73">Any username works in the demo.</p>
+    </div>
+    <form style="display: flex; flex-direction: column; gap: 14px">
+      <label for="username" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Username</label>
+      <input id="username" type="text" placeholder="Username" autocomplete="username" aria-describedby="userhint" style="font: inherit; font-size: 17px; padding: 16px 18px; border: 1px solid #D2D2D7; border-radius: 12px; min-height: 52px; box-sizing: border-box; width: 100%">
+      <label for="password" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Password</label>
+      <input id="password" type="password" placeholder="Password" autocomplete="new-password" aria-describedby="userhint" style="font: inherit; font-size: 17px; padding: 16px 18px; border: 1px solid #D2D2D7; border-radius: 12px; min-height: 52px; box-sizing: border-box; width: 100%">
+      <p id="userhint" style="margin: 0; font-size: 13px; line-height: 1.5; color: #6E6E73">Username: 3–30 letters, digits or _. Password: at least 8 characters.</p>
+      <a href="NewJob.dc.html" style="margin-top: 10px; background: #2347D6; color: #FFFFFF; text-decoration: none; text-align: center; font-size: 17px; font-weight: 500; padding: 16px; border-radius: 999px">Continue</a>
+    </form>
+    <p style="margin: 0; text-align: center; font-size: 15px; color: #6E6E73">Already have an account? <a href="NewJob.dc.html" style="text-decoration: none">Log in</a></p>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":820}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

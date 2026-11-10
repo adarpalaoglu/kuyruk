@@ -1,7 +1,9 @@
 # GitHub Actions workflow (an automatic checklist GitHub runs on its own
 # computers). On every push and pull request it installs Kuyruk, checks code
 # style with ruff, runs the fast tests with the 85% coverage gate, then runs
-# the Postgres tests against a real Postgres database. A red cross on GitHub
+# the Postgres tests against a real Postgres database. A second job, side by
+# side, starts the whole setup with `docker compose up` and runs the browser
+# tests of the web interface (D123). A red cross on GitHub
 # means one of these steps failed. When CI passes for a push to main,
 # release.yml publishes the image (D84).
 name: CI
@@ -96,3 +98,58 @@ jobs:
         env:
           POSTGRES_TEST_URL: postgresql+psycopg://kuyruk:ci-only-throwaway-password@localhost:5432/kuyruk_test
         run: uv run pytest -m postgres -v --no-cov
+
+  # The web interface, tested in a real browser against the real setup
+  # (D123). A separate job, so the `test` job above (whose time E4 measured)
+  # stays exactly as it was. It runs at the same time, on its own machine.
+  #
+  # Not on manual runs (workflow_dispatch): those are E4's timing runs, and E4
+  # judges each run as a whole, so a flaky browser test must never spoil a
+  # timing of the `test` job; E4's runs stay exactly as they were measured.
+  browser:
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+          enable-cache: true
+          # Its own cache (it also holds Playwright), never the one the
+          # `test` job restores.
+          cache-suffix: browser
+
+      # Builds the image and starts db, api, worker and web in demo mode (no
+      # .env here, so compose's demo values apply, D80); --wait returns once
+      # every health check says healthy.
+      - name: Start Kuyruk (docker compose up)
+        run: docker compose up -d --build --wait
+
+      # Playwright's own Chromium, plus the Linux libraries it needs.
+      - name: Install the test browser
+        run: uv run --locked --group browser playwright install --with-deps chromium
+
+      # --no-cov: these tests exercise the containers, not this machine's
+      # Python code, so the coverage gate doesn't apply.
+      - name: Browser tests
+        env:
+          KUYRUK_WEB_URL: http://localhost:8080
+          KUYRUK_API_URL: http://localhost:8000
+        run: uv run --locked --group browser pytest tests/browser -v --no-cov
+
+      # On failure: the containers' logs, and the failed screens as pictures.
+      - name: Logs (on failure)
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Pictures of failed screens (on failure)
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-failures
+          path: browser-failures/
+          if-no-files-found: ignore
+
+      - name: Stop Kuyruk
+        if: always()
+        run: docker compose down -v

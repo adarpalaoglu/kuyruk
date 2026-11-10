@@ -4,11 +4,10 @@
 #   db      the Postgres 16 database (users, jobs, texts)
 #   api     the web service: /docs, /register, /jobs ... at http://localhost:8000
 #   worker  the separate program that does the jobs (spec 7)
-#
-# (The web interface is added in Slice 17.)
+#   web     the web interface at http://localhost:8080 (spec 10, D115)
 #
 # Start order: db healthy -> api starts, creates the tables, healthy -> worker
-# starts (D78).
+# and web start (D78).
 #
 # DEMO MODE BY DEFAULT (D80). With no `.env` file, everything below falls back
 # to clearly labelled demo-only values, so Kuyruk runs on a clean machine with
@@ -59,8 +58,13 @@ x-kuyruk-app: &kuyruk-app
     # (localhost addresses) can't point the containers at the wrong place.
     OLLAMA_URL: http://host.docker.internal:11434
     # The worker's "I'm alive" file for its health check (D79). Only the
-    # worker writes it; the API ignores this setting.
+    # worker writes it. It sits in /tmp, which the api and worker share (the
+    # `worker-alive` volume below), so the API's GET /status can read how old
+    # it is: the worker's last sign of life (D118).
     WORKER_ALIVE_FILE: /tmp/kuyruk-worker-alive
+    # The web interface's address: the only website allowed to call the API
+    # from a browser (CORS, D121). Must match the web service's port below.
+    WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
 
 services:
   db:
@@ -101,6 +105,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      # /tmp shared with the worker, so the API can read the worker's alive
+      # file (D118); the API itself writes nothing there.
+      - worker-alive:/tmp
     healthcheck:
       # Ask GET /health. The image has no curl, so Python does it; any error
       # (no answer, not 200) makes it exit with an error code: unhealthy. The
@@ -123,7 +131,13 @@ services:
     # Docker's stop signal (SIGTERM) and kill signal (SIGKILL) reach the worker
     # directly. With `uv run` in between, a kill stopped only uv while the
     # worker carried on (found in Slice 8).
-    command: ["python", "-m", "app.worker"]
+    # First a tiny shell step deletes an "I'm alive" file left by an earlier
+    # worker: the shared /tmp volume outlives the container (D118), and an old
+    # file must not make a new worker look healthy before its loop has turned
+    # once. `exec` then *replaces* the shell with Python, so Python is still
+    # the first process and still receives the signals. (Done here rather than
+    # in app/worker.py, whose lines E2 counted, D104.)
+    command: ["sh", "-c", "rm -f \"$$WORKER_ALIVE_FILE\" && exec python -m app.worker"]
     depends_on:
       # Only the API creates tables, so the worker waits until it is healthy.
       api:
@@ -141,6 +155,12 @@ services:
     # listen beyond localhost (OLLAMA_HOST=0.0.0.0).
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      # Where the worker writes its alive file, shared with the api (D118).
+      # /tmp because in both images it is writable by every user: a new
+      # Docker volume copies that, so the worker (a normal user, not root)
+      # can write there without changing the Dockerfile.
+      - worker-alive:/tmp
     healthcheck:
       # Healthy while the worker keeps re-dating its "I'm alive" file: about
       # every second when idle, every heartbeat during a job (D79). Docker only
@@ -152,5 +172,40 @@ services:
       start_period: 15s
       start_interval: 1s
 
+  web:
+    # The web interface (Slice 17, D115): plain HTML, CSS and JavaScript files
+    # from ./web, handed out by nginx, a small web server. "unprivileged" is
+    # the variant that runs as a normal user, not as the all-powerful root.
+    # Pinned to an exact version and its fingerprint (digest), like Postgres.
+    # It is a separate address (port 8080) from the API (port 8000), so the
+    # browser's cross-site rule (CORS) is really in play.
+    image: nginxinc/nginx-unprivileged:1.30.6-alpine3.24@sha256:f5116ed4606f3eb015dd4a8e28cb9b351476dc0ad4bc6e9f93b19cec130cdf03
+    environment:
+      # The API's address as the browser sees it; nginx writes it into
+      # /config.js for the pages, and into its safety header (only this site
+      # and the API may be talked to).
+      WEB_API_URL: ${WEB_API_URL:-http://localhost:8000}
+    volumes:
+      # The files are used straight from the repo, read-only: no build step.
+      - ./web:/usr/share/nginx/html:ro
+      - ./web/nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+    ports:
+      # Open http://localhost:8080 in a browser. This computer only.
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      # Ask nginx for the Welcome page; busybox `wget` is inside the image.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+      start_interval: 1s
+
 volumes:
   db-data:
+  # The /tmp folder the api and worker share, for the worker's alive file
+  # (D118).
+  worker-alive:

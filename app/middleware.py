@@ -1,6 +1,6 @@
 """Middleware: code that runs around every request, before and after the route.
 
-Two pieces live here:
+Three pieces live here:
 
 - `RequestIdMiddleware` gives every request a *request ID* (a short label sent
   back in the `X-Request-ID` header, so one request can be found in the logs),
@@ -8,6 +8,9 @@ Two pieces live here:
   crash into a safe 500 reply.
 - `BodySizeLimitMiddleware` refuses request bodies over `max_request_bytes`
   (413), without reading the whole body first.
+- `KuyrukCORSMiddleware` is Starlette's CORS (which website's pages may call
+  the API from a browser, D121), with its one refusal in Kuyruk's error
+  shape.
 
 They are added to the app in `app/main.py`.
 """
@@ -18,7 +21,9 @@ import time
 import uuid
 
 from fastapi import Request, Response, status
+from starlette.datastructures import Headers
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.middleware.cors import CORSMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.errors import INTERNAL_ERROR_MESSAGE, ApiError, error_response
@@ -155,3 +160,30 @@ class BodySizeLimitMiddleware:
             return message
 
         await self.app(scope, counting_receive, send)
+
+
+class KuyrukCORSMiddleware(CORSMiddleware):
+    """Starlette's CORS, with a refused "may I?" in Kuyruk's error shape (D121).
+
+    Before a page from another website sends a request with a login header,
+    the browser asks first (a *preflight*: an OPTIONS request). Starlette
+    answers a refused preflight with a plain-text 400, "Disallowed CORS
+    origin". CORS sits outside the request-ID middleware, so here that one
+    reply is rebuilt in the shared error shape, with its own request ID,
+    like every other error reply. Allowed preflights and everything else are
+    left exactly as Starlette makes them.
+    """
+
+    def preflight_response(self, request_headers: Headers) -> Response:
+        """Answer a preflight; a refusal gets the error shape and an ID."""
+        response = super().preflight_response(request_headers)
+        if response.status_code != status.HTTP_400_BAD_REQUEST:
+            return response
+        # Starlette's reason, e.g. "Disallowed CORS origin, headers".
+        reason = bytes(response.body).decode() or "Disallowed CORS request"
+        return error_response(
+            status.HTTP_400_BAD_REQUEST,
+            "cors_refused",
+            f"{reason}.",
+            headers={REQUEST_ID_HEADER: uuid.uuid4().hex},
+        )

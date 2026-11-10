@@ -1,0 +1,456 @@
+/*
+ * Kuyruk's web interface: the one stylesheet every page shares.
+ *
+ * It rebuilds the approved mockup (docs/mockup/*.dc.html) exactly: the same
+ * font (Inter), colours, sizes and spacing. Each block below is named after
+ * the part of a screen it styles. Colours are kept as named values ("custom
+ * properties", the --names in :root) so each is written once.
+ *
+ * Phone width: the rules at the bottom (@media) turn grids into one column
+ * and shrink the biggest numbers, so every page fits 390 px with no
+ * sideways scrolling (docs/mockup/README.md).
+ */
+
+/* Inter, served from this site's own folder (D124): no request to another
+   website, and it works offline and forever. One file per weight used. */
+@font-face { font-family: Inter; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/Inter-Regular.woff2") format("woff2"); }
+@font-face { font-family: Inter; font-style: normal; font-weight: 500; font-display: swap; src: url("../fonts/Inter-Medium.woff2") format("woff2"); }
+@font-face { font-family: Inter; font-style: normal; font-weight: 600; font-display: swap; src: url("../fonts/Inter-SemiBold.woff2") format("woff2"); }
+@font-face { font-family: Inter; font-style: normal; font-weight: 700; font-display: swap; src: url("../fonts/Inter-Bold.woff2") format("woff2"); }
+
+:root {
+  --text: #1D1D1F;          /* main text */
+  --secondary: #6E6E73;     /* secondary text */
+  --faint: #86868B;         /* faint numbers */
+  --line: #E8E8ED;          /* light lines, empty bars */
+  --line-strong: #D2D2D7;   /* input borders, table header line */
+  --band: #F5F5F7;          /* light bands, soft buttons */
+  --dark: #1D1D1F;          /* dark bands */
+  --dark-text: #A1A1A6;     /* secondary text on dark bands */
+  --dark-line: #5B5B60;     /* unlit step lines on dark bands */
+  --accent: #2347D6;        /* the one accent blue */
+  --accent-hover: #1A36A8;
+  --fail: #B42318;          /* failure text */
+  --white: #FFFFFF;
+}
+
+/* ---- Base ------------------------------------------------------------- */
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  font-family: Inter, system-ui, sans-serif;
+  color: var(--text);
+  background: var(--white);
+  min-height: 100vh;
+}
+a { color: var(--accent); }
+a:hover { color: var(--accent-hover); }
+button { font: inherit; cursor: pointer; }
+button:disabled { cursor: default; opacity: 0.6; }
+/* A clear ring for keyboard users only (not on mouse clicks). */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.band-dark :focus-visible { outline-color: var(--white); }
+[hidden] { display: none !important; }
+
+/* Text only screen readers read (labels the mockup hides visually). */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; margin: -1px; padding: 0; border: 0;
+}
+
+/* "Skip to content" link: invisible until reached with the Tab key. */
+.skip-link {
+  position: absolute; left: 16px; top: -60px; z-index: 10;
+  background: var(--white); color: var(--accent); padding: 10px 16px;
+  border-radius: 999px; box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+}
+.skip-link:focus { top: 12px; }
+
+/* ---- Header ------------------------------------------------------------ */
+
+.site-header {
+  position: relative;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 22px 40px;
+}
+.logo {
+  display: flex; align-items: center; gap: 10px; text-decoration: none;
+  color: var(--text); font-weight: 600; font-size: 18px; letter-spacing: -0.01em;
+}
+.logo:hover { color: var(--text); }
+.demo-pill {
+  font-size: 11px; font-weight: 600; color: var(--secondary);
+  border: 1px solid var(--line-strong); border-radius: 999px; padding: 2px 8px;
+  letter-spacing: 0.02em;
+}
+.main-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 28px; font-size: 14px; }
+.main-nav a { color: var(--text); text-decoration: none; }
+.main-nav a[aria-current="page"] { font-weight: 600; }
+.main-nav a.nav-login { color: var(--accent); font-weight: 500; }
+.lang-switch {
+  font-size: 14px; color: var(--secondary); background: none; border: 0;
+  padding: 10px 4px; min-height: 44px;
+}
+.avatar {
+  width: 36px; height: 36px; border-radius: 50%; border: 0; background: var(--band);
+  color: var(--text); font-size: 14px; font-weight: 600;
+}
+.avatar[aria-expanded="true"] { border: 2px solid var(--accent); }
+
+/* The account menu (budget, status, API docs, log out). */
+.account-menu {
+  position: absolute; right: 32px; top: 70px; width: 300px; z-index: 2;
+  background: var(--white); border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.14), 0 0 0 1px rgba(0,0,0,0.04);
+  padding: 20px; display: flex; flex-direction: column; gap: 16px;
+}
+.menu-block { display: flex; flex-direction: column; gap: 4px; }
+.menu-block.budget { gap: 8px; }
+.menu-small { font-size: 13px; color: var(--secondary); }
+.menu-user { font-size: 16px; }
+.menu-left { font-size: 15px; }
+.menu-links { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; }
+.menu-links a, .menu-links button {
+  color: var(--text); text-decoration: none; font-size: 15px; padding: 12px 0;
+  background: none; border: 0; text-align: left;
+}
+.bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.bar > span { display: block; height: 100%; width: 0; background: var(--accent); }
+
+/* ---- Shared pieces ----------------------------------------------------- */
+
+.btn {
+  display: inline-block; text-decoration: none; border: 0; border-radius: 999px;
+  font-size: 17px; font-weight: 500; padding: 16px 30px; text-align: center;
+}
+.btn-primary { background: var(--accent); color: var(--white); }
+.btn-primary:hover { background: var(--accent-hover); color: var(--white); }
+.btn-soft { background: var(--band); color: var(--text); }
+.btn-soft:hover { color: var(--text); background: var(--line); }
+.btn-white { background: var(--white); color: var(--text); }
+.btn-white:hover { color: var(--text); background: var(--band); }
+.btn-small { font-size: 15px; padding: 12px 22px; min-height: 44px; }
+.link-button {
+  font-size: 14px; color: var(--accent); background: none; border: 0;
+  padding: 10px 0; min-height: 44px;
+}
+.link-button:hover { color: var(--accent-hover); }
+
+.kicker-caps {
+  margin: 0; font-size: 13px; font-weight: 600; color: var(--secondary);
+  letter-spacing: 0.04em; text-transform: uppercase;
+}
+.muted { color: var(--secondary); }
+.fail { color: var(--fail); }
+
+/* An error or notice box under a form or at the top of a screen. */
+.message {
+  margin: 0; border-radius: 14px; padding: 14px 18px; font-size: 15px; line-height: 1.5;
+  background: var(--band);
+}
+.message.is-error { color: var(--fail); }
+.message .request-id { display: block; font-size: 12px; color: var(--secondary); margin-top: 4px; }
+.message a { font-weight: 500; }
+
+/* ---- Welcome (index.html) --------------------------------------------- */
+
+.hero {
+  max-width: 940px; margin: 0 auto; padding: 120px 32px 130px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 28px;
+}
+.hero h1 { margin: 0; font-size: 72px; line-height: 1.04; font-weight: 700; letter-spacing: -0.035em; }
+.hero .lead { margin: 0; font-size: 22px; line-height: 1.5; color: var(--secondary); max-width: 700px; }
+.hero-buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; margin-top: 10px; }
+
+.problems { background: var(--band); padding: 120px 32px; }
+.problems-inner { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+.section-title {
+  margin: 0; font-size: 48px; line-height: 1.1; font-weight: 700; letter-spacing: -0.03em; text-align: center;
+}
+.problems .section-title { margin-bottom: 40px; }
+.problem-card {
+  background: var(--white); border-radius: 24px; padding: 44px;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 36px;
+}
+.problem-card > div { display: flex; flex-direction: column; gap: 10px; }
+.problem-card h3 { margin: 0; font-size: 24px; line-height: 1.25; letter-spacing: -0.015em; }
+.problem-card .note { margin: 0; font-size: 15px; line-height: 1.6; color: var(--secondary); }
+.problem-card .fix { margin: 0; font-size: 17px; line-height: 1.55; }
+.result-number { margin: 0; font-size: 44px; line-height: 1.05; font-weight: 700; letter-spacing: -0.03em; }
+.arrow { color: var(--faint); }
+.accent { color: var(--accent); }
+.more-link { margin: 24px 0 0; text-align: center; font-size: 17px; }
+.more-link a { text-decoration: none; }
+
+.how {
+  max-width: 1040px; margin: 0 auto; padding: 120px 32px;
+  display: flex; flex-direction: column; gap: 64px;
+}
+.how-head { display: flex; flex-direction: column; gap: 16px; text-align: center; align-items: center; }
+.how-head p { margin: 0; font-size: 20px; line-height: 1.5; color: var(--secondary); max-width: 620px; }
+/* The step numbers 1, 2, 3 are drawn by CSS (a counter), so they are not
+   numbers typed into the page. */
+.how-steps {
+  margin: 0; padding: 0; list-style: none; counter-reset: step;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 48px;
+}
+.how-steps li { display: flex; flex-direction: column; gap: 12px; counter-increment: step; }
+.how-steps li::before {
+  content: counter(step); font-size: 56px; font-weight: 700; color: var(--faint); letter-spacing: -0.03em;
+}
+.how-steps strong { font-size: 22px; letter-spacing: -0.01em; }
+.how-steps span { font-size: 17px; line-height: 1.55; color: var(--secondary); }
+
+.band-dark { background: var(--dark); color: #F5F5F7; text-align: center; }
+.cta-band { padding: 120px 32px; }
+.cta-inner { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 24px; }
+.band-dark p.lead-dark { margin: 0; font-size: 20px; line-height: 1.55; color: var(--dark-text); }
+
+.site-footer {
+  max-width: 1040px; margin: 0 auto; padding: 32px; display: flex; flex-wrap: wrap;
+  justify-content: space-between; gap: 12px; font-size: 13px; color: var(--secondary);
+}
+.site-footer a { color: var(--secondary); }
+
+/* ---- The experiments (experiments.html) -------------------------------- */
+
+.exp-hero {
+  max-width: 860px; margin: 0 auto; padding: 100px 32px 110px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 22px;
+}
+.exp-hero h1 { margin: 0; font-size: 72px; line-height: 1.04; font-weight: 700; letter-spacing: -0.035em; }
+.exp-hero p { margin: 0; font-size: 22px; line-height: 1.5; color: var(--secondary); max-width: 660px; }
+.exp { padding: 110px 32px; }
+.exp.band { background: var(--band); }
+.exp-inner { max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 48px; }
+.exp-head { text-align: center; display: flex; flex-direction: column; gap: 14px; align-items: center; }
+.exp-kicker { margin: 0; font-size: 15px; font-weight: 600; color: var(--secondary); }
+.exp-head h2 { margin: 0; font-size: 48px; line-height: 1.1; font-weight: 700; letter-spacing: -0.03em; max-width: 760px; }
+.exp-columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px; }
+.exp-columns .kicker-caps { margin-bottom: 8px; }
+.exp-columns p:last-child { margin: 0; font-size: 17px; line-height: 1.55; }
+.big-pair { display: flex; flex-wrap: wrap; justify-content: center; gap: 72px; text-align: center; padding-top: 12px; }
+.big { margin: 0; font-size: 88px; line-height: 1; font-weight: 700; letter-spacing: -0.05em; }
+.big-caption { margin: 10px 0 0; font-size: 15px; color: var(--secondary); }
+
+.cost { background: var(--band); padding: 100px 32px; }
+.cost-inner { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 20px; text-align: center; }
+.cost-inner h2 { margin: 0; font-size: 48px; line-height: 1.1; font-weight: 700; letter-spacing: -0.03em; }
+.cost-inner .cost-note { margin: 0; font-size: 19px; line-height: 1.5; color: var(--secondary); max-width: 620px; }
+
+.crash { padding: 110px 32px; }
+.crash-inner { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 32px; }
+.crash-inner h2 { margin: 0; font-size: 56px; line-height: 1.08; font-weight: 700; letter-spacing: -0.035em; }
+.crash-inner .lead-dark { max-width: 600px; }
+.crash-button { font-size: 17px; font-weight: 500; border: 0; border-radius: 999px; padding: 16px 32px; min-height: 52px; }
+.crash-message { margin: 0; font-size: 15px; line-height: 1.6; color: var(--dark-text); max-width: 600px; }
+.crash-message a { color: var(--white); }
+.crash-steps {
+  margin: 12px 0 0; padding: 0; list-style: none; width: 100%; text-align: left;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px;
+}
+.crash-steps li {
+  border-top: 2px solid var(--dark-line); padding-top: 16px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.crash-steps li.is-lit { border-top-color: #F5F5F7; }
+.crash-steps .when { font-size: 13px; color: var(--dark-text); }
+.crash-steps strong { font-size: 17px; }
+.crash-steps .what { font-size: 15px; color: var(--dark-text); }
+.exp-footer { max-width: 860px; margin: 0 auto; padding: 48px 32px; text-align: center; font-size: 15px; color: var(--secondary); }
+
+/* ---- Login (login.html) ---------------------------------------------- */
+
+.narrow { max-width: 400px; margin: 0 auto; padding: 96px 32px 120px; display: flex; flex-direction: column; gap: 36px; }
+.page-head { display: flex; flex-direction: column; gap: 10px; text-align: center; }
+.page-head h1 { margin: 0; font-size: 40px; font-weight: 700; letter-spacing: -0.03em; }
+.page-head p { margin: 0; font-size: 17px; color: var(--secondary); }
+.form { display: flex; flex-direction: column; gap: 14px; }
+.input {
+  font: inherit; font-size: 17px; padding: 16px 18px; border: 1px solid var(--line-strong);
+  border-radius: 12px; min-height: 52px; width: 100%; color: var(--text); background: var(--white);
+}
+.hint { margin: 0; font-size: 13px; line-height: 1.5; color: var(--secondary); }
+.form .btn { margin-top: 10px; padding: 16px; width: 100%; }
+.switch-line { margin: 0; text-align: center; font-size: 15px; color: var(--secondary); }
+.switch-line button { font-size: 15px; color: var(--accent); background: none; border: 0; padding: 0; }
+
+/* ---- New job (new.html) ------------------------------------------------ */
+
+.new-main { max-width: 760px; margin: 0 auto; padding: 56px 32px 96px; display: flex; flex-direction: column; gap: 28px; }
+.page-title { margin: 0; font-size: 44px; font-weight: 700; letter-spacing: -0.03em; }
+.new-main .page-title { text-align: center; }
+/* The task switch: three real radio buttons, drawn as one pill. */
+.segmented {
+  align-self: center; display: flex; flex-wrap: wrap; justify-content: center;
+  background: var(--band); border-radius: 999px; padding: 4px; gap: 2px; border: 0; margin: 0;
+}
+.segmented label { position: relative; }
+.segmented input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.segmented span {
+  display: block; border-radius: 999px; font-size: 15px; padding: 10px 22px; min-height: 44px;
+  color: var(--text); cursor: pointer; line-height: 24px;
+}
+.segmented input:checked + span { background: var(--white); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+.segmented input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.task-note { margin: -12px 0 0; text-align: center; font-size: 15px; color: var(--secondary); }
+.textbox {
+  font: inherit; font-size: 17px; line-height: 1.75; padding: 24px 26px; border: 1px solid var(--line-strong);
+  border-radius: 18px; resize: vertical; background: var(--white); width: 100%; color: var(--text);
+}
+.textbox::placeholder { color: var(--faint); }
+.new-tools {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;
+  font-size: 14px; color: var(--secondary);
+}
+.new-tools .tool-buttons { display: flex; gap: 20px; }
+.send-button { align-self: center; margin-top: 8px; padding: 16px 48px; }
+
+/* ---- My jobs (jobs.html) ---------------------------------------------- */
+
+.list-main { max-width: 880px; margin: 0 auto; padding: 56px 32px 96px; display: flex; flex-direction: column; gap: 32px; }
+.list-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px; }
+.filters { display: flex; flex-wrap: wrap; gap: 4px; font-size: 14px; }
+.filters button {
+  font-size: 14px; border: 0; border-radius: 999px; background: transparent; color: var(--text);
+  padding: 8px 14px; min-height: 36px;
+}
+.filters button[aria-pressed="true"] { background: var(--text); color: var(--white); }
+.job-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.job-list li { border-bottom: 1px solid var(--line); }
+.job-list a {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; padding: 22px 4px;
+  text-decoration: none; color: var(--text);
+}
+.job-list .job-text { flex: 1 1 260px; display: flex; flex-direction: column; gap: 4px; }
+.job-list strong { font-size: 17px; font-weight: 600; }
+.job-list .job-meta { font-size: 14px; color: var(--secondary); }
+.job-list .job-count { flex: 0 0 auto; font-size: 15px; color: var(--secondary); }
+.job-list .job-state { flex: 0 0 120px; text-align: right; font-size: 15px; font-weight: 600; }
+.state-running { color: var(--accent); }
+.state-done { color: var(--text); }
+.state-cancelled, .state-queued { color: var(--secondary); }
+.state-failed { color: var(--fail); }
+.empty { margin: 0; padding: 24px 4px; font-size: 17px; color: var(--secondary); }
+.show-more { align-self: center; }
+
+/* ---- Job, live (job.html) ---------------------------------------------- */
+
+.job-main { max-width: 880px; margin: 0 auto; padding: 48px 32px 96px; display: flex; flex-direction: column; gap: 40px; }
+.job-top { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
+.live-line { margin: 0; font-size: 15px; color: var(--secondary); display: flex; align-items: center; gap: 8px; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: inline-block; }
+.big-count { margin: 0; font-size: 120px; line-height: 1; font-weight: 700; letter-spacing: -0.05em; }
+.big-count .of { color: var(--faint); }
+.status-sentence { margin: 0; font-size: 22px; color: var(--text); }
+.counts-line { margin: 0; font-size: 15px; color: var(--secondary); }
+.progress { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.progress > span { display: block; width: 0; height: 100%; background: var(--accent); transition: width 0.3s; }
+.dots-section { display: flex; flex-direction: column; gap: 14px; }
+.dots { display: flex; flex-wrap: wrap; gap: 4px; }
+.dot { width: 10px; height: 10px; border-radius: 3px; background: var(--line); }
+.dot.ok { background: var(--accent); }
+.dot.working { background: none; border: 2px solid var(--accent); }
+.dot.failed { background: var(--text); }
+.legend { display: flex; flex-wrap: wrap; gap: 20px; font-size: 13px; color: var(--secondary); margin: 0; padding: 0; list-style: none; }
+.legend li { display: flex; align-items: center; gap: 6px; }
+.notice { margin: 0; background: var(--band); border-radius: 14px; padding: 18px 22px; font-size: 15px; line-height: 1.6; }
+.latest { display: flex; flex-direction: column; gap: 4px; }
+.latest h2 { margin: 0 0 8px; font-size: 15px; font-weight: 600; color: var(--secondary); }
+.latest-row {
+  display: flex; flex-wrap: wrap; gap: 6px 24px; padding: 14px 0; border-top: 1px solid var(--line);
+  font-size: 15px; line-height: 1.5;
+}
+.latest-row .n { flex: 0 0 40px; color: var(--secondary); }
+.latest-row .t { flex: 1 1 300px; }
+.job-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 28px; align-items: center; }
+.job-actions a { text-decoration: none; font-size: 15px; }
+.cancel-button { font-size: 15px; color: var(--fail); background: none; border: 0; padding: 0; min-height: 44px; }
+
+/* ---- Results (results.html) -------------------------------------------- */
+
+.results-main { max-width: 960px; margin: 0 auto; padding: 48px 32px 96px; display: flex; flex-direction: column; gap: 36px; }
+.results-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 20px; }
+.results-head > div:first-child { display: flex; flex-direction: column; gap: 8px; }
+.results-head p { margin: 0; font-size: 15px; color: var(--secondary); }
+.results-head p.sub { font-size: 17px; }
+.downloads { display: flex; gap: 12px; }
+.results-table { display: flex; flex-direction: column; }
+.results-row {
+  display: grid; grid-template-columns: 48px minmax(0, 1fr) minmax(0, 1fr); gap: 6px 28px;
+  padding: 20px 0; border-bottom: 1px solid var(--line); font-size: 15px; line-height: 1.55;
+}
+.results-row.head {
+  font-size: 13px; font-weight: 600; color: var(--secondary); padding: 0 0 10px;
+  border-bottom-color: var(--line-strong); gap: 0 28px;
+}
+.results-row .n, .results-row .original { color: var(--secondary); }
+.results-row .original, .results-row .result { overflow-wrap: anywhere; white-space: pre-wrap; }
+.results-row.is-failed .result { font-weight: 600; }
+.results-row.is-waiting .result { color: var(--secondary); }
+
+/* ---- Status (status.html) ---------------------------------------------- */
+
+.status-main { max-width: 720px; margin: 0 auto; padding: 72px 32px 96px; display: flex; flex-direction: column; gap: 48px; }
+.status-top { display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; }
+.status-top p { margin: 0; font-size: 17px; color: var(--secondary); }
+.parts { margin: 0; display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.parts > div {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 20px;
+  padding: 20px 0; border-bottom: 1px solid var(--line);
+}
+.parts dt { font-size: 17px; font-weight: 600; }
+.parts dd { margin: 0; font-size: 15px; color: var(--secondary); text-align: right; }
+.parts dd.is-bad { color: var(--fail); }
+
+/* ---- Phone width -------------------------------------------------------- */
+
+@media (max-width: 760px) {
+  .site-header { padding: 16px 16px; gap: 8px 16px; }
+  .main-nav { gap: 8px 18px; }
+  .account-menu { right: 16px; left: 16px; width: auto; top: 100%; }
+  .hero { padding: 64px 16px 72px; gap: 22px; }
+  .hero h1, .exp-hero h1 { font-size: 44px; }
+  .hero .lead, .exp-hero p { font-size: 18px; }
+  .problems, .how, .cta-band, .exp, .cost, .crash { padding-left: 16px; padding-right: 16px; }
+  .problems, .exp, .crash { padding-top: 72px; padding-bottom: 72px; }
+  .how, .cta-band, .cost { padding-top: 72px; padding-bottom: 72px; }
+  .section-title, .exp-head h2, .cost-inner h2 { font-size: 34px; }
+  .crash-inner h2 { font-size: 38px; }
+  .problem-card { grid-template-columns: minmax(0, 1fr); padding: 28px 22px; gap: 24px; border-radius: 20px; }
+  .how-steps, .exp-columns, .crash-steps { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .how { gap: 40px; }
+  .big { font-size: 64px; }
+  .big-pair { gap: 36px; }
+  .exp-hero { padding: 64px 16px 72px; }
+  .narrow { padding: 56px 16px 80px; }
+  .new-main, .list-main, .job-main, .results-main, .status-main { padding-left: 16px; padding-right: 16px; padding-top: 36px; }
+  .page-title { font-size: 34px; }
+  .big-count { font-size: 72px; }
+  .status-sentence { font-size: 19px; }
+  .segmented span { padding: 10px 16px; }
+  .textbox { padding: 18px; }
+  /* Title and date on top; count and state on their own line, as drawn. */
+  .job-list .job-text { flex-basis: 100%; }
+  .results-row { grid-template-columns: 32px minmax(0, 1fr); }
+  .results-row .result { grid-column: 2; }
+  .results-row.head .result-head { grid-column: 2; }
+  .site-footer, .exp-footer { padding-left: 16px; padding-right: 16px; }
+}
+
+/* While a page is starting, it stays hidden until its texts are filled in
+   (js/ui.js removes "loading"), so nobody sees empty labels flash by. */
+html.loading body { visibility: hidden; }
+.job-view { display: flex; flex-direction: column; gap: 40px; }
+
+/* The mockup's page columns measure their maximum width without their side
+   padding (the browser's default "content-box"), so e.g. New job's column is
+   760 px of content plus 32 px each side. Kept the same here. */
+.hero, .how, .site-footer, .exp-hero, .exp-footer, .narrow, .new-main,
+.list-main, .job-main, .results-main, .status-main { box-sizing: content-box; }
+#latest-rows { display: flex; flex-direction: column; gap: 4px; }
+/* The mockup's menu is 300 px of content plus its 20 px padding. */
+.account-menu { box-sizing: content-box; }
+@media (max-width: 760px) { .account-menu { box-sizing: border-box; } }
