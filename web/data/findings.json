@@ -35,5 +35,7 @@
   "e4_release_after_manual": 21,
   "e4_release_skipped": 21,
   "e4_runs": 20,
-  "e4_saved_s": 0
+  "e4_saved_s": 0,
+  "samples_count": 100,
+  "samples_demo_min": 3
 }

@@ -241,11 +241,11 @@ def test_language_switch_changes_every_screen_and_is_remembered(page):
     ticket = send_job(page, ["Kargo hızlı geldi."], task="count_tokens")
     wait_until_finished(page)
     turkish = {
-        "index.html": "Yapay zekâ demoları çalışır.",
-        "experiments.html": "Bilerek bozuldu.",
+        "index.html": "Demoda her şey çalışır.",
+        "experiments.html": "Bilerek bozduk.",
         "new.html": "Kuyruk ne yapsın?",
         "jobs.html": "İşlerim",
-        f"results.html?ticket={ticket}": "Bitti. 1 metin sayıldı.",
+        f"results.html?ticket={ticket}": "Bitti. 1 metnin token'ları sayıldı.",
         "status.html": "Her şey çalışıyor.",
     }
     page.goto(f"{WEB}/index.html")
@@ -256,19 +256,21 @@ def test_language_switch_changes_every_screen_and_is_remembered(page):
         expect(page.locator("h1").first).to_contain_text(heading)
         expect(page.locator("[data-testid=lang-switch]")).to_have_text("EN")
     page.goto(f"{WEB}/job.html?ticket={ticket}")
-    expect(page.locator("#kicker")).to_have_text(re.compile(r"^Bitti · Say · bilet "))
+    expect(page.locator("#kicker")).to_have_text(
+        re.compile(r"^Bitti · Token say · takip no ")
+    )
     # Remembered in localStorage (not a secret); switch back.
     assert page.evaluate("localStorage.getItem('kuyruk.lang')") == "tr"
     page.click("[data-testid=lang-switch]")
     expect(page.locator("#kicker")).to_have_text(re.compile(r"^Done · Count · ticket "))
-    page.goto(f"{WEB}/login.html?mode=login")
+    page.goto(f"{WEB}/login.html")
     expect(page.locator("h1")).to_have_text("Log in.")
 
 
 def test_first_visit_follows_the_browsers_language(browser):
     turkish = new_page(browser, locale="tr-TR")
     turkish.goto(f"{WEB}/index.html")
-    expect(turkish.locator("h1")).to_contain_text("Yapay zekâ demoları çalışır.")
+    expect(turkish.locator("h1")).to_contain_text("Demoda her şey çalışır.")
     # Turkish number style from findings.json: "1.331 MB", "%98".
     expect(turkish.locator("main")).to_contain_text("1.331 MB")
     turkish.context.close()
@@ -297,7 +299,7 @@ def test_the_pass_stays_in_this_tab_only_and_log_out_forgets_it(page):
 def test_wrong_password_shows_the_api_message(page):
     name = sign_up(page)
     page.evaluate("sessionStorage.clear()")
-    page.goto(f"{WEB}/login.html?mode=login")
+    page.goto(f"{WEB}/login.html")
     page.fill("#username", name)
     page.fill("#password", "wrong-password")
     page.click("#login-submit")
@@ -310,12 +312,12 @@ def test_turkish_screens_show_turkish_error_messages(browser):
     turkish = new_page(browser, locale="tr-TR")
     name = sign_up(turkish)
     turkish.evaluate("sessionStorage.clear()")
-    turkish.goto(f"{WEB}/login.html?mode=login")
+    turkish.goto(f"{WEB}/login.html")
     turkish.fill("#username", name)
     turkish.fill("#password", "wrong-password")
     turkish.click("#login-submit")
     expect(turkish.locator("#login-error")).to_contain_text(
-        "Kullanıcı adı veya şifre yanlış."
+        "Kullanıcı adı veya şifre hatalı."
     )
     # A refused job: the Turkish sentence, then the API's own detail.
     turkish.fill("#password", "gizli1234")
@@ -325,8 +327,8 @@ def test_turkish_screens_show_turkish_error_messages(browser):
     expect(turkish.locator("#send-error")).to_contain_text(
         "Kuyruk bunu kabul edemiyor."
     )
-    expect(turkish.locator("#send-error")).to_contain_text("API'nin ayrıntısı:")
-    expect(turkish.locator("#send-error")).to_contain_text("İstek kimliği:")
+    expect(turkish.locator("#send-error")).to_contain_text("API'den gelen ayrıntı:")
+    expect(turkish.locator("#send-error")).to_contain_text("İstek no:")
     assert turkish.errors == []
     turkish.context.close()
 
@@ -348,6 +350,7 @@ def screens(page, ticket):
     """Every screen's address (job and results need a ticket)."""
     return [
         "index.html",
+        "signup.html",
         "login.html",
         "new.html",
         "jobs.html",

@@ -273,6 +273,27 @@ class Job(SQLModel, table=True):
     # (D73). Empty if never taken over, or if nothing was left waiting.
     resumed_from_position: int | None = None
 
+    @property
+    def worker_busy(self) -> bool:
+        """Whether a worker still holds this job and may still change its texts.
+
+        After a cancel, the worker lets the texts already with the AI finish
+        (they keep their results), then lets go of the job (D130). Until then
+        those texts still look "waiting", so the interface must not offer to
+        send them again. "Holds" means: its name is on the job, the job is
+        running or cancelled, and its heartbeat is fresh. The heartbeat check
+        covers a worker that crashed before letting go: after the stale time
+        the job counts as free, as it would for crash recovery. (This uses the
+        API's clock, not the database's as recovery does, D68: for a display
+        flag a second's difference doesn't matter.)
+        """
+        if self.claimed_by is None or self.last_active_at is None:
+            return False
+        if self.state not in (JobState.RUNNING, JobState.CANCELLED):
+            return False
+        age = (utc_now() - self.last_active_at).total_seconds()
+        return age < settings.stale_after_seconds
+
 
 class JobItem(SQLModel, table=True):
     """One text inside a job, together with its result.
@@ -461,6 +482,8 @@ class JobPublic(SQLModel):
     started_at: datetime | None
     finished_at: datetime | None
     error_message: str | None
+    # True while a worker still holds the job (see Job.worker_busy, D130).
+    worker_busy: bool
 
 
 class JobItemPublic(SQLModel):

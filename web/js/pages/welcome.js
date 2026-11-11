@@ -1,5 +1,6 @@
 // The Welcome page (index.html): fill in the story numbers. "Try it
-// yourself" goes straight to New job for someone already logged in.
+// yourself" opens Create your account, or goes straight to New job for
+// someone already logged in.
 
 import { getPass } from "../session.js";
 import { loadStoryNumbers } from "../story.js";

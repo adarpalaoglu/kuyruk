@@ -13,10 +13,10 @@ and rebuild them in the interface's own technology.
 | File | Screen | Uses |
 |---|---|---|
 | Main.dc.html | Welcome: the problem → fix → result story | public |
-| Login.dc.html | Sign up / log in | POST /register, POST /token |
-| NewJob.dc.html | New job: task switch, text box, one Send button | POST /jobs (+ Idempotency-Key), token count for the cost line |
+| Login.dc.html | Sign up / log in. Since Slice 17b two pages (D126): `signup.html` as drawn plus a confirm-password box and a "Create account" button; `login.html` the same without the confirm box and hint, with a "Log in" button | POST /register, POST /token |
+| NewJob.dc.html | New job: task switch, text box, one Send button; since Slice 17b a first-time guide after sign-up (D129) | POST /jobs (+ Idempotency-Key), token count for the cost line |
 | Jobs.dc.html | My jobs, with the account menu open (budget, status, API docs, log out) | GET /jobs?status=, GET /me/budget |
-| Job.dc.html | One job, live: big count, one status sentence, one dot per text, recovered notice, cancel | GET /jobs/{ticket}, GET /jobs/{ticket}/events (SSE), POST /jobs/{ticket}/cancel |
+| Job.dc.html | One job, live: big count, one status sentence, one dot per text, recovered notice, cancel; since Slice 17b also "Simulate a crash" in demo mode (D127) and, on a finished job with texts left without a result, "Send the texts without a result as a new job" (D128; also on Results) | GET /jobs/{ticket}, GET /jobs/{ticket}/events (SSE), POST /jobs/{ticket}/cancel |
 | Results.dc.html | Results: original beside result, Download CSV / JSON | GET /jobs/{ticket}/results |
 | Status.dc.html | System status | GET /health and what the API can report |
 | Behind.dc.html | The experiments: one finding per section + "Simulate a crash" | POST /demo/crash-worker (demo mode only), job events |

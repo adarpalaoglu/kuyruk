@@ -3,7 +3,7 @@
 Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12 lists the slices).
 
 ## Current slice
-**Slice 18** (not started). Slice 17 done.
+**Slice 18** (not started). Slice 17b (interface fixes after first use) built 11 Nov 2026, waiting for Adar's code review and commit.
 
 ## Slices
 
@@ -27,6 +27,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 | 15 | Extras (TR vs EN, one-command rerun) | ☑ | Prediction written? ☑ (pushed first, 1108882). 753 tests (6 on Postgres skipped locally), 99.7% coverage. 50 reviews, Gemma counted twice (all equal). Turkish ÷ English, all 50: o200k_base 1.24 (+24%), Gemma 1.13 (+13%). `run_all --charts-only`: charts redrawn, all 308 numbers match |
 | 16 | Interface mockup approved | ☑ | Approved by Adar 10 Nov 2026; source in `docs/mockup/` (canvas link in its README) |
 | 17 | Interface build | ☑ | 818 fast tests (+6 Postgres, +18 browser), 99.71% coverage; 18/18 browser tests incl. axe on 8 screens × 2 languages; clean-machine check 21/21 PASS; number check 362/362; sample job (100 reviews) 186.5 s in demo mode |
+| 17b | Interface fixes after first use | ☑ | 837 fast tests (+6 Postgres, +44 browser), 99.71% coverage; 44/44 browser tests (26 new, both languages, axe and 390 px on every new state); number check 365/365; 32 screenshots |
 | 18 | README, video, write-up, freeze | ☐ | |
 
 ## Decision log
@@ -44,6 +45,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 - D108–D109 (E4) · Approved by Adar: ☑ (9 Nov 2026)
 - D110–D114 (Turkish vs English cost, one-command rerun, number check) · Approved by Adar as drafted: ☑ (9 Nov 2026); their "Why" lines were added afterwards, for Adar to glance at
 - D115–D124 (web interface) and the spec 6 / 8 / 10 wording updates · Approved by Adar: ☑ (10 Nov 2026, approved with the Slice 17 plan; written in his voice afterwards); D125 (demo AI answer) asked for by Adar after the review, 10 Nov 2026
+- D126–D129 (sign-up and log-in pages, crash button on the job page, texts without a result as a new job, first-time guide) · Approved by Adar: ☑ (11 Nov 2026, with the Slice 17b plan; D128 widened to done jobs with failed texts); D127 updated at Adar's request (one line per button plus the "i" explanation); D130 (cancelled job final once the worker lets go) Adar's design, 11 Nov 2026
 - D87–D93 (real AI measurements; D88 and D93 reworded as Adar asked) and the D82 "done" note · Approved by Adar: ☑ (8 Nov 2026); D89 update (memory emptied before every run) and D91 addition approved 8 Nov 2026; D94 (10-minute heat-up) approved 8 Nov 2026
 
 ## Interface parity (checked 10 Nov 2026, Slice 17)
@@ -51,8 +53,8 @@ Everything on `/docs` can be done in the interface (each proved by a browser tes
 
 | Endpoint (on /docs) | Where in the interface | ✓ |
 |---|---|---|
-| POST /register | Login: "Create your account" (signs up, then logs in) | ☑ |
-| POST /token | Login: "Log in" | ☑ |
+| POST /register | Create your account (signup.html; confirm password checked first; signs up, then logs in) | ☑ |
+| POST /token | Log in (login.html) | ☑ |
 | POST /jobs | New job: task switch, text box / sample reviews / file upload (.txt, .csv, .json; JSON keeps texts with line breaks), Send | ☑ |
 | Idempotency-Key | New job: one key per exact content, so a double-click or a resend gets the same ticket | ☑ |
 | GET /jobs/{ticket} | Job page (state, counts, time left) | ☑ |
@@ -63,7 +65,7 @@ Everything on `/docs` can be done in the interface (each proved by a browser tes
 | GET /me/budget | Account menu: budget bar, tokens left, reset time; 429 shown on New job | ☑ |
 | POST /jobs/estimate (new) | New job: the cost line ("12 texts · 274 tokens · … left today") | ☑ |
 | GET /health, GET /status (new) | System status (account menu → System status) | ☑ |
-| POST /demo/crash-worker | The experiments: "Simulate a crash" (demo mode only) | ☑ |
+| POST /demo/crash-worker | The experiments: "Simulate a crash" (demo mode only); the job page's "Simulate a crash" next to Cancel, with `?ticket=` (D127) | ☑ |
 
 ## Open items / leftovers
 - `JWT_SECRET` is required (min 32 characters); Kuyruk refuses to start without it. A random one was added to the local `.env`. Tests use their own throwaway secret (set in `tests/conftest.py`), so CI needs none.
@@ -229,6 +231,16 @@ Slice 17 (web interface, limits for the README, and leftovers):
 - Browser tests: `docker compose up -d --wait`, then `KUYRUK_WEB_URL=http://localhost:8080 uv run --group browser pytest tests/browser -v --no-cov` (about 3 minutes; first time `uv run --group browser playwright install chromium`). The tests open the browser with Playwright's "bypass CSP" (the site's safety header otherwise blocks the code Playwright injects); the site itself is unchanged.
 - Inter 4.1 (4 weights, OFL) in `web/fonts/`; axe-core 4.14.0 (MPL-2.0) in `tests/browser/vendor/`; Playwright 1.64.1 in the `browser` group.
 
+Slice 17b (interface fixes after first use, 11 Nov 2026):
+- **What changed:** two account pages (`signup.html`, `login.html`; D126); "Simulate a crash" next to Cancel on a running job's page in demo mode, crashing exactly that job through `POST /demo/crash-worker?ticket=` (D127); "Send the texts without a result as a new job" on the job and results pages of a cancelled/failed job (waiting + failed texts) and a done job with failed texts (failed only), opening New job filled in with the cost line (D128); a three-step guide on New job after sign-up, hidden for good per username in localStorage (D129). New shared files `web/js/account.js`, `guide.js`, `resend.js`.
+- **tr.json:** Adar's hand-written wording kept; only `title.login` changed (approved), `login.continue` removed (no longer used), new keys added with Adar's approved wording. The older browser tests were updated to his new Turkish ("takip no", "Bilerek bozduk.", ...).
+- **Limit of the browser test for D127:** compose runs one worker, so two jobs can't both be running; the test checks that the button sends this job's ticket and that a queued job has no button. The Python tests prove the API crashes the named job while an older one runs.
+- **Browser tests:** a test now cancels its user's unfinished jobs at the end (one worker: a left-behind job made later tests wait). The whole browser run now takes about 8 minutes (was about 3), mostly the new crash-and-recover test.
+- **Code review (9 findings, all fixed with Adar's approval):** (1) right after a cancel, texts still with the AI looked "never started" and could be sent twice: D130 (`worker_busy`, the worker lets go of a cancelled job); (2) the resend button could flash on a finished job before its texts were read again; (3) a crash requested just as the job ended left "waiting for Kuyruk to notice…" on screen; (4) a sign-up whose log-in failed couldn't be retried ("username taken"): a retry now only logs in; (5) a failed browser test's picture was taken after the clean-up, and the clean-up could crash; (6) the test helper hid the guide only after New job showed it; (7) one shared "fill the box" function; (8) New job loads the guide, the numbers and a job's leftovers at the same time; (9) a failed crash press no longer removes an earlier takeover's notice.
+- **Explanation lines (Adar's request, 11 Nov 2026):** one short grey line under Simulate a crash, Cancel job, the resend button, Send, Use sample reviews, Download CSV/JSON and the account menu's budget; the crash button is a pill with a dark outline; an "i" button next to Cancel and Simulate a crash opens three sentences in place (aria-expanded, keyboard-tested, axe-clean). "Use sample reviews"' numbers come from the data (D120): `samples_count` (reviews_tr.csv) and `samples_demo_min` (median of the measured 4-at-once runs, 179 s → 3 min) in `findings.json`.
+- **E2's line count (Adar's decision, 11 Nov 2026):** adding the release to `app/worker.py` (D130) makes the worker 481 lines of code (was 462 when E2 ran); `e2_code.csv` and `docs/experiments.md` now say 481, with a note. The crash-recovery count (105) and every measured E2 number are unchanged.
+- **Comparison with the mockup (11 Nov 2026, by Claude), screens changed in 17b:** Create your account: a third box "Confirm password" and the button says "Create account" (mockup: two boxes, "Continue"); the "Log in" link is underlined (mockup: not underlined; without the underline the link differs from the grey sentence only by colour, 1.5:1, which the accessibility check refuses). Log in: same layout without the confirm box and hint, "Log in" button, underlined "Create an account" link (the mockup has no separate log-in screen). New job: identical to the mockup unless the guide shows; the guide (grey band, numbers like Welcome's steps) is new and has no mockup. Job: "See results so far", "Cancel job" (red link) and "Simulate a crash" (outlined pill) with an "i" button, each button with a grey 13 px line under it, spread over the width (mockup: two links side by side, no lines); the "i" panel (grey band) opens under them; at 390 px the three stack. New job: a grey line under "Use sample reviews" (right-aligned) and under Send (mockup: none). Results: a grey line under the downloads, right-aligned. Account menu: a 12 px grey line under "AI budget today". A finished job's page and Results show a grey pill button and a count line (no mockup). All other screens: unchanged from the 10 Nov comparison (same remaining differences).
+
 ## Session log
 - 6 Nov 2026 — Planning finished in Claude app. Starting documents created. Tools installed. Decision log D01–D41 approved.
 - 6 Nov 2026 — Slice 0 done: uv project (Python 3.12, exact pins + `uv.lock`), folders, `app/settings.py`, `/health` + tests, `.env.example`, `.gitignore`, MIT licence, placeholder README, `ci.yml` (ruff + pytest, 85% gate).
@@ -248,3 +260,4 @@ Slice 17 (web interface, limits for the README, and leftovers):
 - 9 Nov 2026 — Slice 14 done: prediction pushed first (95cf984). `bench/e4_ci.py` (20 manual CI runs on GitHub, cache on/off interleaved, step times from log timestamps; secret lines with links), chart `e4_cache.png`, E4 write-up filled (Why/Takeaway left for Adar). D108–D109 approved. One rerun of the series after a GitHub "not found" (script now retries); secrets collection corrected (only published Release runs as "after a push", no duplicates).
 - 9 Nov 2026 — Slice 15 done: prediction pushed first (1108882). 50 reviews picked (seed 15) and translated by Claude, 5 pairs checked by Adar; `bench/cost_tr_en.py` (o200k_base + Gemma raw mode, counted twice), chart `cost_tr_en.png`, cost write-up (Why/Takeaway left for Adar). `bench/run_all.py` (prerequisites, Docker quit/open, E3 GitHub download, timings, `--charts-only`, `--check-only`) and `bench/check_numbers.py` (308 numbers). Three 1 ms slips in E1 fixed. D110–D114 approved.
 - 10 Nov 2026 — Slice 17 done: web interface (8 screens, TR/EN, live progress, crash button), `GET /status`, `POST /jobs/estimate`, CORS, `bench/web_data.py` + number check on the interface, `web` service in compose, browser tests (Playwright + axe) as their own CI job, 19 screenshots compared with the mockup. D115–D124 and spec 6/8/10 updates approved. Review: 10 findings fixed; added demo answers (D125), Turkish messages for every API error code, all 100 sample reviews.
+- 11 Nov 2026 — Slice 17b built: interface fixes after first use (D126–D129 approved), code review's 9 findings fixed (D130), explanation lines and the "i" button. E2 worker line count updated to 481 (Adar's decision); guide step 3 names the buttons in quotation marks.

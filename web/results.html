@@ -1,7 +1,9 @@
 <!doctype html>
 <!-- Results (docs/mockup/Results.dc.html): each original text beside its
      result, failed ones marked, Download CSV / JSON (GET /jobs/{ticket} and
-     /results). js/pages/results.js. -->
+     /results), and for a finished job with texts left without a result,
+     "Send the texts without a result as a new job" (D128).
+     js/pages/results.js. -->
 <html lang="en" class="loading">
 <head>
 <meta charset="utf-8">
@@ -23,10 +25,18 @@
       <h1 class="page-title" id="headline"></h1>
       <p class="sub" id="sub"></p>
     </div>
-    <div class="downloads">
-      <button type="button" class="btn btn-primary btn-small" id="csv" data-i18n="results.csv"></button>
-      <button type="button" class="btn btn-soft btn-small" id="json" data-i18n="results.json" data-i18n-aria="results.json_label"></button>
+    <div class="downloads-block">
+      <div class="downloads">
+        <button type="button" class="btn btn-primary btn-small" id="csv" data-i18n="results.csv" aria-describedby="download-hint"></button>
+        <button type="button" class="btn btn-soft btn-small" id="json" data-i18n="results.json" data-i18n-aria="results.json_label" aria-describedby="download-hint"></button>
+      </div>
+      <p class="action-note" id="download-hint" data-i18n="results.download_hint"></p>
     </div>
+  </div>
+  <div class="resend resend-start" id="resend" hidden>
+    <a class="btn btn-soft btn-small" id="resend-link" aria-describedby="resend-counts resend-hint"></a>
+    <p class="action-note" id="resend-counts"></p>
+    <p class="action-note" id="resend-hint"></p>
   </div>
   <div class="results-table" id="results-table" role="table" hidden>
     <div class="results-row head" role="row">

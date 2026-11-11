@@ -288,8 +288,13 @@ crash.
 |---|---|
 | Database writes for one uninterrupted 40-text job (75.8 s) | 139 (same in all 3 jobs) |
 | of which heartbeat | 15 (10.8%), exactly one per 5 s of running |
-| Worker (`app/worker.py`), lines of code | 462 |
+| Worker (`app/worker.py`), lines of code | 481 |
 | of which crash recovery (takeover, heartbeat, hand back; demo-only lines left out) | 105 |
+
+The worker's line count is from the code as it is now. It was 462 when E2
+ran; Slice 17b (11 Nov 2026) added the step that lets go of a cancelled job
+once its last texts finish (D130). That step isn't part of crash recovery,
+so the 105 recovery lines and every measured number above are unchanged.
 
 The heartbeat's writes are the cost compared with a plain BackgroundTasks
 job, which has no heartbeat. (E2's broken version also writes one, because
@@ -366,7 +371,7 @@ more program to run: the worker's container.
   worker can take over a stuck job.
 - **What the fix costs:** one extra container; 15 of 139 database writes
   per job (10.8%), compared with a plain BackgroundTasks job with no
-  heartbeat; 105 of the worker's 462 lines of code.
+  heartbeat; 105 of the worker's 481 lines of code.
 - **Work can run twice:** after a crash, up to as many items as run at once
   are redone (4 here, in every run). With a paid AI service that would mean
   up to 4 extra paid calls per crash (not tested in E2). Every item must be

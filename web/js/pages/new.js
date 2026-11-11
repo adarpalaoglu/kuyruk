@@ -8,10 +8,18 @@
 //   (D119): the same count the budget uses, nothing saved.
 // - Send uses one Idempotency-Key per exact content (D20): a double-click or
 //   a second press for the same texts gets the same ticket, never two jobs.
+// - new.html?from=<ticket> starts with the texts that finished job left
+//   without a result, and its task (D128); the old job is not changed.
+// - Right after sign-up a three-step guide shows above the form until it is
+//   hidden (D129); step 3, the crash, only in demo mode.
 
-import { ApiError, call } from "../api.js";
+import { ApiError, call, systemStatus } from "../api.js";
+import { guideWanted, hideGuideFor } from "../guide.js";
 import { t, texts as textsWord } from "../i18n.js";
-import { boot, showError } from "../ui.js";
+import { readSettled, textsWithoutResult } from "../resend.js";
+import { loadStoryNumbers } from "../story.js";
+import { getUser } from "../session.js";
+import { boot, shortTicket, showError } from "../ui.js";
 
 const box = document.getElementById("textbox");
 const costLine = document.getElementById("cost-line");
@@ -19,10 +27,14 @@ const sendButton = document.getElementById("send");
 const sendError = document.getElementById("send-error");
 const uploadNote = document.getElementById("upload-note");
 const fileInput = document.getElementById("file");
+const fromNote = document.getElementById("from-note");
 
 // Texts from an uploaded file, used until the box is edited.
 let uploaded = null;
 let uploadedName = "";
+// The finished job whose leftover texts are in the box (?from=), until the
+// box is edited.
+let fromJob = null;
 let estimate = null; // the last cost reply, or an ApiError
 let estimating = false;
 let timer = null;
@@ -122,8 +134,85 @@ function drawSendButton() {
 
 /** Show the note about an uploaded file whose texts contain line breaks. */
 function drawUploadNote() {
-  uploadNote.hidden = !uploaded;
-  if (uploaded) uploadNote.textContent = t("new.upload_note", { name: uploadedName, texts: textsWord(uploaded.length) });
+  // Leftover texts from a job have their own note (drawFromNote).
+  const show = Boolean(uploaded) && !fromJob;
+  uploadNote.hidden = !show;
+  if (show) uploadNote.textContent = t("new.upload_note", { name: uploadedName, texts: textsWord(uploaded.length) });
+}
+
+/** Show where the texts came from: "15 texts without a result from job abc1234." */
+function drawFromNote() {
+  fromNote.hidden = !fromJob;
+  if (fromJob) {
+    fromNote.textContent = t("new.from_note", { texts: textsWord(fromJob.count), ticket: shortTicket(fromJob.id) });
+  }
+}
+
+/** Fill the box with sample reviews (the "Use sample reviews" buttons). */
+async function useSamples() {
+  const reply = await fetch("data/sample_reviews.json");
+  box.value = (await reply.json()).join("\n");
+  uploaded = null;
+  fromJob = null;
+  drawUploadNote();
+  drawFromNote();
+  changed();
+}
+
+/**
+ * Put a list of texts in the box, one per line. A text with line breaks is
+ * shown on one line (breaks as spaces); if any text has one, the list itself
+ * is kept and sent whole, as long as the box isn't edited.
+ */
+function fillBox(list) {
+  box.value = list.map((text) => text.replace(/\s*\r?\n\s*/g, " ")).join("\n");
+  uploaded = list.some((text) => /\r|\n/.test(text)) ? list : null;
+}
+
+/**
+ * Start with a finished job's texts without a result (?from=<ticket>, D128):
+ * the same task, and the texts exactly as they were sent. If a worker still
+ * holds the job (its last texts finishing after a cancel, D130), this waits
+ * until it lets go, so no text is sent to the AI twice. A job that is still
+ * running, or has nothing left, leaves New job empty.
+ */
+async function loadLeftovers(ticket) {
+  let job;
+  let items;
+  try {
+    ({ job, items } = await readSettled(ticket));
+  } catch (error) {
+    showError(sendError, error);
+    return;
+  }
+  const list = textsWithoutResult(job, items).map((item) => item.original_text);
+  if (!list.length) return;
+  document.querySelector(`input[name=task][value=${job.task}]`).checked = true;
+  drawTask();
+  fillBox(list);
+  fromJob = { id: job.id, count: list.length };
+  drawFromNote();
+  changed();
+}
+
+/** Show the first-time guide if this account still wants it (D129). */
+async function startGuide() {
+  const guide = document.getElementById("guide");
+  if (!guideWanted(getUser())) return;
+  guide.hidden = false;
+  document.getElementById("guide-samples").addEventListener("click", useSamples);
+  document.getElementById("guide-hide").addEventListener("click", () => {
+    hideGuideFor(getUser());
+    guide.hidden = true;
+    // The keyboard goes back to the top of the form, not to nowhere.
+    document.querySelector("input[name=task]:checked").focus();
+  });
+  try {
+    // The crash exists only in demo mode, so step 3 shows only there.
+    document.getElementById("guide-step-3").hidden = !(await systemStatus()).demo_mode;
+  } catch {
+    // Without the status, step 3 stays hidden.
+  }
 }
 
 /** Read a .txt, .csv or .json file into a list of texts (null if unreadable). */
@@ -213,7 +302,9 @@ boot({
     drawCost();
     box.addEventListener("input", () => {
       uploaded = null;
+      fromJob = null;
       drawUploadNote();
+      drawFromNote();
       changed();
     });
     for (const radio of document.querySelectorAll("input[name=task]")) {
@@ -222,13 +313,7 @@ boot({
         changed();
       });
     }
-    document.getElementById("samples").addEventListener("click", async () => {
-      const reply = await fetch("data/sample_reviews.json");
-      box.value = (await reply.json()).join("\n");
-      uploaded = null;
-      drawUploadNote();
-      changed();
-    });
+    document.getElementById("samples").addEventListener("click", useSamples);
     document.getElementById("upload").addEventListener("click", () => fileInput.click());
     fileInput.addEventListener("change", async () => {
       const file = fileInput.files[0];
@@ -243,20 +328,29 @@ boot({
         return;
       }
       uploadedName = file.name;
-      // The box shows each text on one line; line breaks inside a text are
-      // shown as spaces, and the uploaded list itself is what gets sent.
-      box.value = list.map((text) => text.replace(/\s*\r?\n\s*/g, " ")).join("\n");
-      uploaded = list.some((text) => /\r|\n/.test(text)) ? list : null;
+      fromJob = null;
+      drawFromNote();
+      fillBox(list);
       drawUploadNote();
       changed();
     });
     sendButton.addEventListener("click", send);
-    if (currentTexts().length) changed();
+    // Independent of each other, so they run at the same time: the guide
+    // (waits for GET /status), the numbers in "Use sample reviews"' line
+    // (findings.json), and a finished job's leftovers.
+    const from = new URLSearchParams(location.search).get("from");
+    await Promise.all([
+      startGuide(),
+      loadStoryNumbers().catch(() => {}),
+      from ? loadLeftovers(from) : Promise.resolve(),
+    ]);
+    if (!from && currentTexts().length) changed();
   },
   redraw: () => {
     drawTask();
     drawSendButton();
     drawCost();
     drawUploadNote();
+    drawFromNote();
   },
 });

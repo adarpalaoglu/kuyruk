@@ -32,6 +32,8 @@ JOB_FIELDS = {
     "started_at",
     "finished_at",
     "error_message",
+    # D130: whether a worker still holds the job (no internal name shown).
+    "worker_busy",
 }
 RESULT_FIELDS = {"position", "original_text", "result", "state", "error_message"}
 

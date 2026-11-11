@@ -9,9 +9,18 @@
 //   takes texts in order, a few at a time);
 // - `recovered` shows the notice that another worker took over;
 // - `end` stops the stream.
+//
+// In demo mode a running job also has "Simulate a crash" next to Cancel
+// (D127): it asks the API to crash the worker running *this* job
+// (POST /demo/crash-worker?ticket=...), and the recovered notice above then
+// shows Kuyruk taking it over. Each button has a short line under it saying
+// what it does, and the "i" button opens a few sentences on the difference.
+// A finished job with texts left without a result offers to send them as a
+// new job (js/resend.js, D128), once no worker holds it any more (D130).
 
 import { call, systemStatus } from "../api.js";
 import { serverMessage, t } from "../i18n.js";
+import { drawResend, readSettled, settled } from "../resend.js";
 import { watchJob } from "../stream.js";
 import { boot, el, shortTicket, showError } from "../ui.js";
 
@@ -21,7 +30,8 @@ const LIVE = new Set(["queued", "running"]);
 let job = null;
 let items = [];
 // Texts at once, from the settings (GET /status). Unknown (0) means no dot
-// is marked "working now", rather than guessing a number.
+// is marked "working now", rather than guessing a number. If the status
+// can't be read, demo mode counts as off, so no crash button shows.
 let atOnce = 0;
 let connection = "open";
 let recovered = null; // {pos, seconds} once a takeover was seen
@@ -30,6 +40,16 @@ let lastFetch = 0;
 let fetchTimer = null;
 let stop = null;
 let cancelling = false;
+let demo = false; // demo mode on (from GET /status): the crash button shows
+// Where a crash pressed on this page is: null (none), "asking" (sent),
+// "waiting" (accepted; the worker stops at its next beat), "recovered"
+// (another worker took over; the notice above says so), "too_late" (the job
+// ended before the worker crashed).
+let crashState = null;
+let crashError = null;
+// Whether `items` were read after the job finished and its worker let go
+// (D130), so they are final and the resend button may show.
+let final = false;
 
 const $ = (id) => document.getElementById(id);
 
@@ -78,9 +98,36 @@ function drawTop() {
   link.href = `results.html?ticket=${job.id}`;
   link.textContent = t(live ? "job.results_so_far" : "job.results");
   const cancel = $("cancel");
-  cancel.hidden = !live;
+  $("cancel-action").hidden = !live;
   cancel.disabled = cancelling;
   cancel.textContent = t(cancelling ? "job.cancelling" : "job.cancel");
+  drawCrash();
+}
+
+/** The crash button, its "i" explanation and what a press is doing. */
+function drawCrash() {
+  // Only while the job runs: a queued job has no worker to crash yet.
+  const show = demo && job.state === "running";
+  const button = $("crash");
+  $("crash-action").hidden = !show;
+  // The explanation belongs to the two buttons; it goes with them.
+  if (!show) setInfoOpen(false);
+  button.textContent = t("job.crash");
+  // One press at a time; pressing again is possible once this one is over.
+  button.disabled = crashState === "asking" || crashState === "waiting";
+  const line = $("crash-status");
+  if (crashError) {
+    showError(line, crashError);
+    return;
+  }
+  line.classList.remove("is-error");
+  const key = {
+    asking: "experiments.crash_asking",
+    waiting: "experiments.crash_waiting",
+    too_late: "experiments.crash_too_late",
+  }[crashState];
+  line.hidden = !key;
+  line.textContent = key ? t(key) : "";
 }
 
 /** Colour one dot per text: done, failed, working now (estimated, D122) or waiting. */
@@ -140,6 +187,28 @@ function draw() {
   drawDots();
   drawLatest();
   drawRecovered();
+  drawResend($("resend"), job, items, final);
+}
+
+/** Open or close the few sentences on Cancel vs a crash (the "i" button). */
+function setInfoOpen(open) {
+  $("crash-info").hidden = !open;
+  $("crash-info-button").setAttribute("aria-expanded", String(open));
+}
+
+/**
+ * Once the job has finished, read it and its texts again until no worker
+ * holds it (D130); only then are the texts final and the resend button may
+ * show. Until then the button stays hidden.
+ */
+async function settle() {
+  try {
+    ({ job, items } = await readSettled(ticket));
+    final = settled(job);
+  } catch {
+    // The page keeps what it has; the button stays hidden.
+  }
+  draw();
 }
 
 /** Read the texts again, at most once a second. */
@@ -174,15 +243,14 @@ function onEvent(name, data, fresh) {
     // long the job stood still. Unknown if this page saw no text finish.
     const seconds = lastChangeAt === null ? null : Math.round((performance.now() - lastChangeAt) / 1000);
     recovered = { pos: data.from_position, seconds };
+    if (crashState === "waiting") crashState = "recovered";
   } else if (name === "end") {
     job.state = data.state;
-    // Refresh the times and the error message, then the last texts.
-    call(`/jobs/${ticket}`).then(({ data: fresh }) => {
-      job = fresh;
-      draw();
-    }).catch(() => {});
-    lastFetch = 0;
-    refreshItems();
+    // A crash asked for (or still being asked for) but never seen: the job
+    // ended first.
+    if (crashState === "asking" || crashState === "waiting") crashState = "too_late";
+    // The times, the error message and the final texts, once settled.
+    settle();
   }
   if (job.state === "running" && !job.started_at) job.started_at = new Date().toISOString();
   draw();
@@ -195,10 +263,32 @@ async function cancel() {
   try {
     job = (await call(`/jobs/${ticket}/cancel`, { method: "POST" })).data;
     showError($("cancel-error"), null);
+    // The stream's `end` follows; settle() also runs here in case it doesn't.
+    settle();
   } catch (error) {
     showError($("cancel-error"), error);
   }
   cancelling = false;
+  draw();
+}
+
+/**
+ * Crash this job's worker on purpose (demo mode only, D127). An earlier
+ * takeover's notice stays until a new takeover replaces it.
+ */
+async function crash() {
+  crashState = "asking";
+  crashError = null;
+  draw();
+  try {
+    await call(`/demo/crash-worker?ticket=${encodeURIComponent(job.id)}`, { method: "POST" });
+    // The job may have ended while the request was on its way (`end` then
+    // already said "too late").
+    if (crashState === "asking") crashState = "waiting";
+  } catch (error) {
+    crashState = null;
+    crashError = error;
+  }
   draw();
 }
 
@@ -207,7 +297,9 @@ boot({
   needsLogin: true,
   start: async () => {
     try {
-      atOnce = (await systemStatus()).limits.texts_at_once;
+      const status = await systemStatus();
+      atOnce = status.limits.texts_at_once;
+      demo = status.demo_mode;
     } catch {
       // Unknown: no "working now" dots (see atOnce).
     }
@@ -221,6 +313,11 @@ boot({
     }
     $("job-view").hidden = false;
     $("cancel").addEventListener("click", cancel);
+    $("crash").addEventListener("click", crash);
+    $("crash-info-button").addEventListener("click", () => setInfoOpen($("crash-info").hidden));
+    // A job that had already finished: final now, or once its worker lets go.
+    final = settled(job);
+    if (!LIVE.has(job.state) && !final) settle();
     draw();
     stop = watchJob(job.id, {
       onEvent,

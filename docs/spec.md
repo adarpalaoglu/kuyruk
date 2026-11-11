@@ -96,6 +96,8 @@ Allowed transitions only; anything else is a bug and must be rejected by code an
 
 **JobItem (a "text"):** id, job_id, position (1…N), original_text, result, state, tries, error_message.
 
+A job reply (`JobPublic`) shows none of the worker fields, only `worker_busy`: true while a worker still holds a running or cancelled job (its name in `claimed_by` and a heartbeat younger than "stale after"), so the interface can wait until a cancelled job's texts are final (D130).
+
 Results live in the same row as their text. `last_active_at` is updated every heartbeat while the job runs, with the database's own clock (D68); if it is older than "stale after", the job is stuck, not still working.
 
 Public reply models (`UserPublic`, `JobPublic`, `JobItemPublic`) expose only safe fields. A test proves `hashed_password` never appears in any reply.
@@ -118,7 +120,7 @@ Public reply models (`UserPublic`, `JobPublic`, `JobItemPublic`) expose only saf
 | GET | `/me/budget` | yes | Tokens used / left today |
 | GET | `/health` | no | Instant "alive" reply (E1 and Docker use it) |
 | GET | `/status` | no | API, database, worker (age of its alive file), jobs running and waiting, AI backend, demo mode, and the limits the interface shows; counts only, no names (D117, D118) |
-| POST | `/demo/crash-worker` | yes | **Demo mode only:** tells the worker to exit abruptly so recovery can be watched. Disabled (404) outside demo mode |
+| POST | `/demo/crash-worker` | yes | **Demo mode only:** tells the worker to exit abruptly so recovery can be watched; optional `?ticket=` names which of your running jobs (otherwise the oldest; D127). Disabled (404) outside demo mode |
 
 Rules:
 - Another user's ticket → **404** (never 403).
@@ -144,7 +146,7 @@ A separate process (its own container): `python -m app.worker`.
 - One job at a time per worker; inside a job, up to 4 texts at once (setting).
 - One text per AI call.
 - Heartbeat: updates `last_active_at` every 5 s.
-- Checks for cancel before each text.
+- Checks for cancel before each text. After a cancel, the texts already with the AI finish and keep their results; then the worker lets go of the job (removes its name from `claimed_by`, one write, cancelled jobs only, D130).
 - Applies the retry and "10 in a row" rules.
 
 ### 7.1 Crash recovery (re-queue logic) — HAND-DESIGNED

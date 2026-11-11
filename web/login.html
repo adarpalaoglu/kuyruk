@@ -1,6 +1,6 @@
 <!doctype html>
-<!-- Sign up / log in (docs/mockup/Login.dc.html): one form for both, using
-     POST /register and POST /token. js/pages/login.js does the work. -->
+<!-- Log in (D126): username and password, POST /token. Creating an account
+     is its own page, signup.html. js/pages/login.js does the work. -->
 <html lang="en" class="loading">
 <head>
 <meta charset="utf-8">
@@ -16,20 +16,19 @@
 <header class="site-header" id="site-header"></header>
 <main id="main" class="narrow">
   <div class="page-head">
-    <h1 id="login-title"></h1>
+    <h1 data-i18n="login.login_title"></h1>
     <p id="login-sub"></p>
   </div>
   <p class="message" id="login-note" role="status" hidden></p>
   <form class="form" id="login-form" novalidate>
     <label for="username" class="sr-only" data-i18n="login.username"></label>
-    <input class="input" id="username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required aria-describedby="userhint" data-i18n-placeholder="login.username">
+    <input class="input" id="username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required data-i18n-placeholder="login.username">
     <label for="password" class="sr-only" data-i18n="login.password"></label>
-    <input class="input" id="password" name="password" type="password" autocomplete="new-password" required aria-describedby="userhint" data-i18n-placeholder="login.password">
-    <p class="hint" id="userhint"></p>
+    <input class="input" id="password" name="password" type="password" autocomplete="current-password" required data-i18n-placeholder="login.password">
     <p class="message" id="login-error" role="alert" hidden></p>
     <button class="btn btn-primary" type="submit" id="login-submit"></button>
   </form>
-  <p class="switch-line"><span id="switch-text"></span> <button type="button" id="switch-mode"></button></p>
+  <p class="switch-line"><span data-i18n="login.no_account"></span> <a id="switch-link" href="signup.html" data-i18n="login.to_signup"></a></p>
 </main>
 </body>
 </html>

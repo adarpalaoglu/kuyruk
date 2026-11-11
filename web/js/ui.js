@@ -110,7 +110,10 @@ let menuOpen = false;
 
 /** Fill the account menu: who you are, today's budget, the links. */
 async function fillMenu(menu) {
-  const budgetBlock = el("div", { class: "menu-block budget" }, el("span", { class: "menu-small", text: t("menu.budget") }));
+  // The budget's title, then one line saying what the number means.
+  const budgetBlock = el("div", { class: "menu-block budget" },
+    el("span", { class: "menu-small", text: t("menu.budget") }),
+    el("span", { class: "menu-hint", text: t("menu.budget_hint") }));
   menu.replaceChildren(
     el("div", { class: "menu-block" },
       el("span", { class: "menu-small", text: t("menu.signed_in") }),
@@ -125,7 +128,7 @@ async function fillMenu(menu) {
         text: t("menu.logout"),
         onclick: () => {
           clearSession();
-          location.assign("login.html?mode=login");
+          location.assign("login.html");
         },
       })),
   );
@@ -151,8 +154,8 @@ async function fillMenu(menu) {
 /**
  * Draw the header.
  *
- * `page` marks the current menu link. The login page shows only the logo and
- * the language switch. People who aren't logged in see The experiments, API
+ * `page` marks the current menu link. The log-in and sign-up pages show only
+ * the logo and the language switch. People who aren't logged in see The experiments, API
  * and Log in; logged-in people see New job, My jobs, The experiments and
  * their account menu.
  */
@@ -179,7 +182,7 @@ export function renderHeader(page) {
     text: t("lang.other"),
     onclick: () => setLang(otherLang()),
   });
-  if (page === "login") {
+  if (page === "login" || page === "signup") {
     header.append(lang);
     return;
   }

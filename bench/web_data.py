@@ -252,6 +252,25 @@ def cost_findings(data: Path) -> dict:
     }
 
 
+def sample_findings(data: Path) -> dict:
+    """The line under "Use sample reviews": how many, and about how long.
+
+    The demo AI replays the real AI's times at 4 texts at once (D93), so a
+    sample job takes about as long as the measured 4-at-once runs of all
+    the reviews (texts_at_once.csv): their median, in whole minutes, rounded
+    half up (179 s → 3).
+    """
+    at_four = [
+        row for row in read(data, "texts_at_once.csv") if row["texts_at_once"] == "4"
+    ]
+    return {
+        "samples_count": len(read(data, "reviews_tr.csv")),
+        "samples_demo_min": int(
+            round_half_up(median_of(at_four, "total_seconds") / 60)
+        ),
+    }
+
+
 def findings(data: Path = DATA) -> dict:
     """Every story number, computed fresh from the CSV files."""
     return (
@@ -260,6 +279,7 @@ def findings(data: Path = DATA) -> dict:
         | e3_findings(data)
         | e4_findings(data)
         | cost_findings(data)
+        | sample_findings(data)
     )
 
 

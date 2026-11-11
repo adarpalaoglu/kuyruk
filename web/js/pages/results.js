@@ -6,14 +6,22 @@
 // state and error_message for every text. The CSV starts with a byte-order
 // mark (BOM), a hidden marker that tells Excel the file is UTF-8, so Turkish
 // letters show correctly.
+//
+// A finished job with texts left without a result also offers "Send the
+// texts without a result as a new job" (js/resend.js, D128), once no worker
+// holds it any more (D130): right after a cancel the page reads the job
+// again every second until its last texts have finished.
 
 import { call } from "../api.js";
 import { serverMessage, t, texts as textsWord } from "../i18n.js";
+import { drawResend, readSettled, settled } from "../resend.js";
 import { boot, el, shortTicket, showError } from "../ui.js";
 
 const ticket = new URLSearchParams(location.search).get("ticket") || "";
 let job = null;
 let items = [];
+// Whether `items` are final (the job finished and its worker let go, D130).
+let final = false;
 
 const $ = (id) => document.getElementById(id);
 
@@ -55,6 +63,7 @@ function draw() {
   $("sub").textContent = note;
   $("sub").hidden = !note;
   $("col-result").textContent = t(`results.col_${job.task}`);
+  drawResend($("resend"), job, items, final);
   $("rows").replaceChildren(
     ...items.map((item) =>
       el("div", { class: `results-row is-${item.state}`, role: "row" },
@@ -105,9 +114,9 @@ boot({
   page: "results",
   needsLogin: true,
   start: async () => {
+    const id = encodeURIComponent(ticket);
     try {
-      job = (await call(`/jobs/${encodeURIComponent(ticket)}`)).data;
-      items = (await call(`/jobs/${encodeURIComponent(ticket)}/results`)).data;
+      [job, items] = (await Promise.all([call(`/jobs/${id}`), call(`/jobs/${id}/results`)])).map((reply) => reply.data);
     } catch (error) {
       showError($("results-error"), error);
       $("results-error").append(" ", el("a", { href: "jobs.html", text: t("job.back") }));
@@ -117,7 +126,18 @@ boot({
     $("results-table").hidden = false;
     $("csv").addEventListener("click", downloadCsv);
     $("json").addEventListener("click", downloadJson);
+    final = settled(job);
     draw();
+    // Finished, but a worker still holds it: wait for its last texts.
+    if (["done", "failed", "cancelled"].includes(job.state) && !final) {
+      readSettled(ticket)
+        .then((latest) => {
+          ({ job, items } = latest);
+          final = settled(job);
+          draw();
+        })
+        .catch(() => {});
+    }
   },
   redraw: draw,
 });

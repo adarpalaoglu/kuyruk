@@ -698,3 +698,34 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 - **Decision:** in demo mode only, the fake AI answers "Demo: " followed by the first 6 words of the text it received (`FAKE_AI_DEMO_WORDS`), with "…" if words were left out, e.g. "Demo: Kargo çok hızlı geldi, paketleme özenliydi,…". The text is the one the AI receives, so emails and phone numbers are already hidden (D50). Outside demo mode nothing changes. The waits are exactly the same as before (a test proves it).
 - **Why:** with one fixed answer, every result looked identical and a visitor couldn't tell which result belonged to which review. The "Demo:" label makes it impossible to mistake the echo for a real summary. No experiment is affected: E1 and E2 never run in demo mode (D95), and the answer's text was never measured.
 - **Date:** 10 Nov 2026 · **Status:** Approved (10 Nov 2026)
+
+---
+
+## Interface fixes after first use (Slice 17b)
+
+### D126 — Sign up and log in are two pages
+- **Decision:** `signup.html` ("Create your account.": username, password, confirm password, "Create account") and `login.html` ("Log in.": username, password, "Log in"), each linking to the other and keeping the "come back to" page. The two passwords are compared in the browser before anything is sent; the API's `/register` is unchanged. "Try it yourself" opens sign-up; the header's "Log in", log-out and "your login ran out" open log-in.
+- **Why:** one form for both looked the same in both modes, so people didn't know which they were on.
+- **Date:** 11 Nov 2026 · **Status:** Approved (11 Nov 2026)
+
+### D127 — The crash button is also on the job page, and crashes that job
+- **Decision:** in demo mode, a running job's page shows "Simulate a crash" (a pill with a dark outline) next to "Cancel job" (a red text link). Each has one short line under it saying what it does, and a small "i" button next to them opens a few sentences, in place, on the difference (cancel is your decision and final; a crash is unplanned and Kuyruk carries on from the first unfinished text). *(Updated 11 Nov 2026 at Adar's request: the single shared line became one line per button plus the "i" explanation.)* `POST /demo/crash-worker?ticket=…` (optional) marks that job; without it, the oldest running job as before. Demo mode only, own jobs only (someone else's, unknown or malformed ticket: 404; a job of yours that isn't running: 409 `no_running_job`). The button on The experiments page stays.
+- **Why:** the button was too hard to find, and without a ticket a second running job could be crashed instead of the one on screen.
+- **Date:** 11 Nov 2026 · **Status:** Approved (11 Nov 2026)
+
+### D128 — Texts without a result go into a new job, the old job stays
+- **Decision:** on a cancelled or failed job, the waiting and failed texts open in New job (same task, `new.html?from=<ticket>`) with the usual cost line; sending makes a normal new job. A done job with failed texts gets the button too; only its failed texts go into the new job. The button ("Send the texts without a result as a new job") is on the job page and the results page, with a line such as "12 never started · 3 failed".
+- **Why:** a cancelled job was a dead end; changing the old job would break the state rules (cancelled and failed are final).
+- **Date:** 11 Nov 2026 · **Status:** Approved (11 Nov 2026)
+
+### D129 — A first-time guide on New job, remembered per browser
+- **Decision:** right after sign-up, New job shows "Start here" with three steps (send the sample reviews · watch it work · crash it and watch it recover; step 3 only in demo mode), each with a link to where it happens, and "Hide the guide". Shown after sign-up only; hiding it is remembered in localStorage per username.
+- **Why:** a new visitor didn't know the three things worth trying. It isn't secret, like the language choice (D116).
+- **Date:** 11 Nov 2026 · **Status:** Approved (11 Nov 2026)
+
+### D130 — A cancelled job's texts are final only once the worker lets go
+- **Options:** a "working" mark on each text (one more database write per text) · wait a fixed time after a cancel · mark the job, not each text.
+- **Decision:** after a cancel, the worker lets the texts already with the AI finish, then lets go of the job: it removes its name from `claimed_by` (one write per cancelled job, only if the job is still cancelled and still has its name). Every job reply shows `worker_busy`: true while a worker holds a running or cancelled job and its heartbeat is younger than the stale time, so a worker that crashed before letting go doesn't hold the job for ever. The interface shows "Send the texts without a result as a new job" only when `worker_busy` is false; New job opened from a busy job waits until it isn't.
+- **Why:** right after a cancel, the texts still with the AI look "waiting" for a few seconds. Sending them again in those seconds would send them to the AI twice and spend their tokens twice. A per-text mark would add one write per text and change E2's published write counts; marking the job costs one write, only for cancelled jobs, and E2 never cancels.
+- **Cost:** the button appears a few seconds after the cancel. `worker_busy` uses the API's clock, not the database's (D68); for a display flag a second's difference doesn't matter.
+- **Date:** 11 Nov 2026 · **Status:** Approved (11 Nov 2026, Adar's design)

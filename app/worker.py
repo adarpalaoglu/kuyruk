@@ -645,7 +645,8 @@ class Worker:
 
         - every text tried: done (even if some failed, D15);
         - too many failures in a row: failed, "AI unavailable";
-        - cancelled: nothing to do, the API already recorded it;
+        - cancelled: the API already recorded it; the texts that were with
+          the AI have finished now, so the worker lets go of the job (D130);
         - stop request: handed back (D76): still running, but with this
           worker's name removed, so the next worker picks it up at once and
           it doesn't count as a crash;
@@ -657,8 +658,11 @@ class Worker:
         if reason == "shutdown":
             self.hand_back(job_id)
             return
-        if reason in ("cancelled", "lost"):
-            log.info("Job %s left as is (%s).", job_id, reason)
+        if reason == "cancelled":
+            self.release_cancelled(job_id)
+            return
+        if reason == "lost":
+            log.info("Job %s left as is (lost).", job_id)
             return
         final = JobState.FAILED if reason == "ai_unavailable" else JobState.DONE
         with Session(self.engine) as session:
@@ -679,6 +683,31 @@ class Worker:
                 job_id,
                 final,
             )
+
+    def release_cancelled(self, job_id: uuid.UUID) -> None:
+        """Let go of a cancelled job once its last texts have finished (D130).
+
+        Removing this worker's name tells the API (`worker_busy`) that no text
+        of the job can change any more, so the interface may offer the texts
+        without a result as a new job. One write per cancelled job; jobs that
+        aren't cancelled never get it, so E2's write counts are unchanged.
+        Only if the job is still cancelled and still has this worker's name.
+        """
+        with Session(self.engine) as session:
+            released = session.execute(
+                update(Job)
+                .where(
+                    Job.id == job_id,
+                    Job.state == JobState.CANCELLED,
+                    Job.claimed_by == self.worker_id,
+                )
+                .values(claimed_by=None)
+            ).rowcount
+            session.commit()
+        if released:
+            log.info("Job %s cancelled; its last texts finished, released.", job_id)
+        else:
+            log.info("Job %s left as is (cancelled).", job_id)
 
     def hand_back(self, job_id: uuid.UUID) -> None:
         """After a polite stop, give the job back for the next worker (D76).

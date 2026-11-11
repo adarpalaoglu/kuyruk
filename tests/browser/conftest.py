@@ -97,11 +97,13 @@ def page(browser, request) -> Iterator:
     fresh = new_page(browser)
     yield fresh
     report = getattr(request.node, "report_call", None)
+    # The picture first, so it shows the failure, not the clean-up after it.
     if report is not None and report.failed:
         FAILURES.mkdir(exist_ok=True)
         fresh.screenshot(
             path=str(FAILURES / f"{request.node.name}.png"), full_page=True
         )
+    cancel_unfinished_jobs(fresh)
     assert fresh.errors == [], f"the page's code failed: {fresh.errors}"
     fresh.context.close()
 
@@ -111,15 +113,34 @@ def unique_name() -> str:
     return "t" + uuid.uuid4().hex[:12]
 
 
-def sign_up(page) -> str:
-    """Create an account through the interface; returns the username."""
+def sign_up(page, keep_guide=False) -> str:
+    """Create an account through the interface; returns the username.
+
+    Sign-up switches the first-time guide on (D129); it is hidden again here
+    unless `keep_guide`, so the other tests see New job as usual.
+    """
     name = unique_name()
-    page.goto(f"{WEB}/login.html")
+    page.goto(f"{WEB}/signup.html")
     page.fill("#username", name)
     page.fill("#password", PASSWORD)
-    page.click("#login-submit")
+    page.fill("#confirm", PASSWORD)
+    page.click("#signup-submit")
     page.wait_for_url(re.compile(r"/new\.html$"))
+    if not keep_guide:
+        page.evaluate(f"localStorage.setItem('kuyruk.guide.{name}', 'hidden')")
+        # New job is already showing the guide; open it again without.
+        page.reload()
+        page.wait_for_load_state("networkidle")
     return name
+
+
+def log_in(page, name, password=PASSWORD) -> None:
+    """Log in through the Log in page (after a log-out, or in a new tab)."""
+    page.goto(f"{WEB}/login.html")
+    page.fill("#username", name)
+    page.fill("#password", password)
+    page.click("#login-submit")
+    page.wait_for_url(re.compile(r"/new\.html"))
 
 
 def pass_of(page) -> str:
@@ -147,6 +168,26 @@ def send_job(page, texts, task="llm") -> str:
     page.click("#send")
     page.wait_for_url(re.compile(r"/job\.html\?ticket="))
     return page.url.split("ticket=")[1]
+
+
+def cancel_unfinished_jobs(page) -> None:
+    """Cancel the page user's queued and running jobs, at the end of a test.
+
+    There is one worker, so a job a test leaves behind (e.g. one that failed
+    halfway) would make every later test's job wait in the queue.
+    """
+    try:
+        if not page.context.pages or not pass_of(page):
+            return
+        for state in ("queued", "running"):
+            reply = api(page, "GET", "/jobs", params={"status": state})
+            # E.g. the pass ran out: nothing more can be cleaned up.
+            if reply.status_code != 200:
+                return
+            for job in reply.json():
+                api(page, "POST", f"/jobs/{job['id']}/cancel")
+    except Exception as error:  # noqa: BLE001 - clean-up must never hide a result
+        print(f"Couldn't cancel the test's unfinished jobs: {error}")
 
 
 def check_accessibility(page) -> None:

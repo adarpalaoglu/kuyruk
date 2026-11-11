@@ -2,12 +2,14 @@
 
 The API side: the address doesn't exist outside demo mode (404, even before
 the login check); in demo mode it puts a crash mark on the caller's oldest
-running job. The worker side: in demo mode, a worker that sees the mark at a
-heartbeat exits on the spot. A real exit would end the test run, so the tests
-replace `crash_now` with a stand-in that only records the crash and stops the
-worker. The real abrupt exit is shown by the Postgres kill test and the
-manual run.
+running job, or on the job named by ?ticket= (D127). The worker side: in
+demo mode, a worker that sees the mark at a heartbeat exits on the spot. A
+real exit would end the test run, so the tests replace `crash_now` with a
+stand-in that only records the crash and stops the worker. The real abrupt
+exit is shown by the Postgres kill test and the manual run.
 """
+
+import uuid
 
 import pytest
 from sqlalchemy import update
@@ -109,6 +111,54 @@ def test_crash_marks_your_oldest_running_job(client, log_in_as, engine, demo_mod
     assert "stop abruptly" in reply.json()["message"]
     assert crash_mark(engine, older) is True
     assert crash_mark(engine, newer) is False
+
+
+def test_a_named_job_is_the_one_marked(client, log_in_as, engine, demo_mode):
+    """?ticket= marks exactly that job, even when an older one runs (D127)."""
+    headers = log_in_as("ayse")
+    older = running_job_of(engine, "ayse", seconds_ago=60)
+    newer = running_job_of(engine, "ayse", seconds_ago=10)
+    reply = client.post(CRASH, params={"ticket": str(newer.id)}, headers=headers)
+    assert reply.status_code == 202
+    assert reply.json()["ticket"] == str(newer.id)
+    assert crash_mark(engine, newer) is True
+    assert crash_mark(engine, older) is False
+
+
+@pytest.mark.parametrize("ticket", ["not-a-ticket", str(uuid.uuid4())])
+def test_a_malformed_or_unknown_named_ticket_is_404(
+    client, log_in_as, engine, demo_mode, ticket
+):
+    """A ticket that isn't a job of yours: the shared 404, nothing marked."""
+    headers = log_in_as("ayse")
+    job = running_job_of(engine, "ayse")
+    reply = client.post(CRASH, params={"ticket": ticket}, headers=headers)
+    assert_error(reply, 404, "not_found")
+    assert crash_mark(engine, job) is False
+
+
+def test_another_users_named_ticket_is_404(client, log_in_as, engine, demo_mode):
+    """Naming Ayşe's running job as Mehmet: 404 (never 403), not marked."""
+    log_in_as("ayse")
+    ayse_job = running_job_of(engine, "ayse")
+    mehmet = log_in_as("mehmet")
+    reply = client.post(CRASH, params={"ticket": str(ayse_job.id)}, headers=mehmet)
+    assert_error(reply, 404, "not_found")
+    assert crash_mark(engine, ayse_job) is False
+
+
+def test_a_named_job_that_is_not_running_is_409(client, log_in_as, engine, demo_mode):
+    """Your own queued job, named: 409 `no_running_job`, nothing marked."""
+    headers = log_in_as("ayse")
+    with Session(engine) as session:
+        queued = make_job(
+            session, ["a"], owner=session.get(User, user_id(engine, "ayse"))
+        )
+        ticket = str(queued.id)
+    running = running_job_of(engine, "ayse")
+    reply = client.post(CRASH, params={"ticket": ticket}, headers=headers)
+    assert_error(reply, 409, "no_running_job")
+    assert crash_mark(engine, running) is False
 
 
 def test_another_users_job_is_never_marked(client, log_in_as, engine, demo_mode):

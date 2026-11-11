@@ -1,8 +1,11 @@
 <!doctype html>
 <!-- One job, live (docs/mockup/Job.dc.html): the big count, one status
-     sentence, one dot per text, the recovered notice, the latest results and
-     Cancel. GET /jobs/{ticket}, GET /jobs/{ticket}/results, the live stream
-     GET /jobs/{ticket}/events, POST /jobs/{ticket}/cancel. js/pages/job.js. -->
+     sentence, one dot per text, the recovered notice, the latest results,
+     Cancel and, in demo mode, Simulate a crash (D127). A finished job with
+     texts left without a result offers to send them as a new job (D128).
+     GET /jobs/{ticket}, GET /jobs/{ticket}/results, the live stream
+     GET /jobs/{ticket}/events, POST /jobs/{ticket}/cancel,
+     POST /demo/crash-worker?ticket=... js/pages/job.js. -->
 <html lang="en" class="loading">
 <head>
 <meta charset="utf-8">
@@ -41,9 +44,28 @@
         <div id="latest-rows"></div>
       </section>
       <p class="message" id="cancel-error" role="alert" hidden></p>
-      <div class="job-actions">
-        <a id="results-link"></a>
-        <button type="button" class="cancel-button" id="cancel"></button>
+      <div class="job-actions-block">
+        <div class="job-actions">
+          <a id="results-link"></a>
+          <div class="action" id="cancel-action">
+            <button type="button" class="cancel-button" id="cancel" aria-describedby="cancel-hint"></button>
+            <p class="action-note" id="cancel-hint" data-i18n="job.cancel_hint"></p>
+          </div>
+          <div class="action" id="crash-action" hidden>
+            <span class="action-row">
+              <button type="button" class="btn btn-outline btn-small" id="crash" aria-describedby="crash-hint"></button>
+              <button type="button" class="info-button" id="crash-info-button" aria-expanded="false" aria-controls="crash-info" data-i18n-aria="job.info_label"><span aria-hidden="true">i</span></button>
+            </span>
+            <p class="action-note" id="crash-hint" data-i18n="job.crash_hint"></p>
+          </div>
+        </div>
+        <p class="info-panel" id="crash-info" data-i18n="job.info_text" hidden></p>
+        <p class="action-note" id="crash-status" role="status" hidden></p>
+      </div>
+      <div class="resend" id="resend" hidden>
+        <a class="btn btn-soft btn-small" id="resend-link" aria-describedby="resend-counts resend-hint"></a>
+        <p class="action-note" id="resend-counts"></p>
+        <p class="action-note" id="resend-hint"></p>
       </div>
   </div>
 </main>

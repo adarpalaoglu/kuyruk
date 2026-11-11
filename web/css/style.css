@@ -454,3 +454,69 @@ html.loading body { visibility: hidden; }
 /* The mockup's menu is 300 px of content plus its 20 px padding. */
 .account-menu { box-sizing: content-box; }
 @media (max-width: 760px) { .account-menu { box-sizing: border-box; } }
+
+/* ---- Slice 17b: crash button, resend, first-time guide ------------------ */
+
+/* A secondary pill: white with a dark outline (the job page's crash button). */
+.btn-outline { background: var(--white); color: var(--text); box-shadow: inset 0 0 0 1.5px var(--text); }
+.btn-outline:hover { background: var(--band); color: var(--text); }
+.btn-outline:disabled { color: var(--secondary); box-shadow: inset 0 0 0 1.5px var(--line-strong); background: var(--white); }
+
+/* One short, always visible line under an important action. */
+.action-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--secondary); text-align: center; max-width: 520px; }
+.action-note.is-error { color: var(--fail); }
+.action-note .request-id { display: block; font-size: 12px; color: var(--secondary); margin-top: 4px; }
+
+/* The job page's actions: each button with its line underneath. */
+.job-actions-block { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.job-actions { align-items: flex-start; }
+.job-actions > a { min-height: 44px; display: inline-flex; align-items: center; }
+.action { display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: 280px; }
+.action-row { display: inline-flex; align-items: center; gap: 4px; }
+/* The "i" button: a small circle, with a 44 px area to press. */
+.info-button {
+  width: 44px; height: 44px; padding: 0; border: 0; background: none; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center; color: var(--secondary);
+}
+.info-button span {
+  width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid currentColor;
+  font-size: 13px; font-weight: 600; line-height: 19px; text-align: center; font-style: normal;
+}
+.info-button:hover, .info-button[aria-expanded="true"] { color: var(--text); }
+.info-panel { margin: 0; max-width: 560px; background: var(--band); border-radius: 14px; padding: 14px 18px; font-size: 14px; line-height: 1.6; text-align: left; }
+
+/* Results: the downloads with their line; New job: Send and sample lines. */
+.downloads-block { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.downloads-block .action-note { text-align: right; }
+.send-block { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.samples-hint { text-align: right; max-width: none; margin-top: -18px; }
+.menu-hint { font-size: 12px; line-height: 1.4; color: var(--secondary); margin-top: -4px; }
+
+/* "Send the texts without a result as a new job" and its counts. */
+.resend { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.resend-start { align-items: flex-start; }
+.resend-start .action-note { text-align: left; }
+
+/* New job: where the texts came from (a finished job's leftovers). */
+.from-note { margin-top: -16px; }
+
+/* New job: the first-time guide, a light band with three numbered steps. */
+.guide { background: var(--band); border-radius: 16px; padding: 24px 28px; display: flex; flex-direction: column; gap: 18px; }
+.guide-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.guide h2 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+.guide-steps {
+  margin: 0; padding: 0; list-style: none; counter-reset: step;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px;
+}
+.guide-steps li { display: flex; flex-direction: column; gap: 6px; counter-increment: step; }
+.guide-steps li::before { content: counter(step); font-size: 28px; font-weight: 700; color: var(--faint); letter-spacing: -0.03em; }
+.guide-steps strong { font-size: 15px; font-weight: 600; }
+.guide-steps span { font-size: 14px; line-height: 1.5; color: var(--secondary); }
+.guide-steps a, .guide-steps .link-button { font-size: 14px; align-self: flex-start; text-decoration: none; }
+.guide-steps .link-button { padding: 0; min-height: 0; line-height: 1.5; }
+@media (max-width: 760px) {
+  .guide { padding: 20px; }
+  .downloads-block { align-items: flex-start; }
+  .downloads-block .action-note, .samples-hint { text-align: left; }
+  .guide-steps { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+}

@@ -3,7 +3,11 @@
 The pictures in `docs/screenshots/` let the built interface be compared with
 the approved mockup (`docs/mockup/*.dc.html`): every screen at 1280 px (a
 laptop) and 390 px (a phone) in English, plus Welcome, Job and Results in
-Turkish.
+Turkish. Slice 17b's additions too: Create your account, New job with the
+first-time guide, and a cancelled job's page and results with "Send the
+texts without a result as a new job" (both widths in English, 1280 px in
+Turkish), and the job page with its "i" explanation open (1280 px, both
+languages).
 
 It needs the running setup in demo mode (`docker compose up -d --wait`) and
 the browser tests' library:
@@ -13,7 +17,8 @@ the browser tests' library:
 It first creates realistic data through the API, like the mockup's: user
 "ayse" with finished, cancelled and running jobs, and a 500-text job that it
 crashes on purpose, so the Job screen shows the "another worker took over"
-notice. At the end the 500-text job is cancelled, so the worker is free again.
+notice (pressing the job page's own "Simulate a crash" button). At the end
+the 500-text job is cancelled, so the worker is free again.
 """
 
 import json
@@ -84,8 +89,12 @@ def make_data(name: str, token: str) -> dict:
     return tickets
 
 
-def page_for(browser, token: str, name: str, width: int, lang: str):
-    """A page logged in as `name` (or logged out, token ""), in `lang`."""
+def page_for(browser, token: str, name: str, width: int, lang: str, guide=False):
+    """A page logged in as `name` (or logged out, token ""), in `lang`.
+
+    `guide` shows New job's first-time guide, as right after sign-up (D129);
+    otherwise it is hidden, as for someone who has used Kuyruk before.
+    """
     context = browser.new_context(
         viewport={"width": width, "height": 900},
         locale="tr-TR" if lang == "tr" else "en-GB",
@@ -96,6 +105,8 @@ def page_for(browser, token: str, name: str, width: int, lang: str):
         script += (
             f"sessionStorage.setItem('kuyruk.pass', '{token}');"
             f"sessionStorage.setItem('kuyruk.user', '{name}');"
+            f"localStorage.setItem('kuyruk.guide.{name}', "
+            f"'{'show' if guide else 'hidden'}');"
         )
     context.add_init_script(script)
     return context.new_page()
@@ -131,7 +142,7 @@ def main() -> None:
         expect(job.locator("#sentence")).to_have_text(re.compile("Summarising"))
         # Let it run a while first, so the screen shows some progress.
         job.wait_for_timeout(40_000)
-        httpx.post(f"{API}/demo/crash-worker", headers=headers).raise_for_status()
+        job.click("#crash")
         expect(job.locator("#recovered")).to_be_visible(timeout=60_000)
         job.wait_for_timeout(4000)
         print("Screens:")
@@ -139,22 +150,38 @@ def main() -> None:
         job.set_viewport_size({"width": 390, "height": 900})
         shoot(job, "job-390-en.png")
         job.set_viewport_size({"width": 1280, "height": 900})
+        # The "i" panel on Cancel vs a crash, opened, in both languages.
+        job.click("#crash-info-button")
+        shoot(job, "job-info-1280-en.png")
         job.click("[data-testid=lang-switch]")
+        shoot(job, "job-info-1280-tr.png")
+        job.click("#crash-info-button")
         shoot(job, "job-1280-tr.png")
         job.context.close()
 
         screens = {
             "welcome": ("index.html", False),
+            "signup": ("signup.html", False),
             "login": ("login.html", False),
             "new": ("new.html", True),
+            "new-guide": ("new.html", True),
             "jobs": ("jobs.html", True),
             "results": (f"results.html?ticket={tickets['summary']}", True),
             "status": ("status.html", True),
             "experiments": ("experiments.html", True),
+            "job-cancelled": (f"job.html?ticket={tickets['cancelled']}", True),
+            "results-cancelled": (f"results.html?ticket={tickets['cancelled']}", True),
         }
         for width in (1280, 390):
             for screen, (address, logged_in) in screens.items():
-                page = page_for(browser, token if logged_in else "", name, width, "en")
+                page = page_for(
+                    browser,
+                    token if logged_in else "",
+                    name,
+                    width,
+                    "en",
+                    guide=screen == "new-guide",
+                )
                 page.goto(f"{WEB}/{address}")
                 if screen == "new":
                     page.click("#samples")
@@ -165,9 +192,17 @@ def main() -> None:
                     expect(page.locator("#account-menu .bar")).to_be_visible()
                 shoot(page, f"{screen}-{width}-en.png")
                 page.context.close()
-        for screen in ("welcome", "results"):
+        turkish = ("welcome", "results", "signup", "new-guide", "job-cancelled")
+        for screen in turkish:
             address, logged_in = screens[screen]
-            page = page_for(browser, token if logged_in else "", name, 1280, "tr")
+            page = page_for(
+                browser,
+                token if logged_in else "",
+                name,
+                1280,
+                "tr",
+                guide=screen == "new-guide",
+            )
             page.goto(f"{WEB}/{address}")
             shoot(page, f"{screen}-1280-tr.png")
             page.context.close()

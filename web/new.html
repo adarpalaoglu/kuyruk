@@ -1,7 +1,9 @@
 <!doctype html>
 <!-- New job (docs/mockup/NewJob.dc.html): choose the task, paste or upload
      texts, see the cost, send. POST /jobs/estimate for the cost line,
-     POST /jobs (with an Idempotency-Key) to send. js/pages/new.js. -->
+     POST /jobs (with an Idempotency-Key) to send. After sign-up, a short
+     first-time guide (D129); with ?from=<ticket>, the texts a finished job
+     left without a result (D128). js/pages/new.js. -->
 <html lang="en" class="loading">
 <head>
 <meta charset="utf-8">
@@ -17,6 +19,17 @@
 <header class="site-header" id="site-header"></header>
 <main id="main" class="new-main">
   <h1 class="page-title" data-i18n="new.title"></h1>
+  <section class="guide" id="guide" aria-labelledby="guide-title" hidden>
+    <div class="guide-head">
+      <h2 id="guide-title" data-i18n="new.guide_title"></h2>
+      <button type="button" class="link-button" id="guide-hide" data-i18n="new.guide_hide"></button>
+    </div>
+    <ol class="guide-steps">
+      <li><strong data-i18n="new.guide_s1_title"></strong><span data-i18n="new.guide_s1_text"></span><button type="button" class="link-button" id="guide-samples" data-i18n="new.samples"></button></li>
+      <li><strong data-i18n="new.guide_s2_title"></strong><span data-i18n="new.guide_s2_text"></span><a href="jobs.html" data-i18n="header.jobs"></a></li>
+      <li id="guide-step-3" hidden><strong data-i18n="new.guide_s3_title"></strong><span data-i18n="new.guide_s3_text"></span><a href="experiments.html#crash" data-i18n="header.experiments"></a></li>
+    </ol>
+  </section>
   <fieldset class="segmented" id="task">
     <legend class="sr-only" data-i18n="new.task_group"></legend>
     <label><input type="radio" name="task" value="normalise"><span data-i18n="task.normalise"></span></label>
@@ -31,15 +44,20 @@
   <div class="new-tools">
     <span id="cost-line" aria-live="polite"></span>
     <span class="tool-buttons">
-      <button type="button" class="link-button" id="samples" data-i18n="new.samples"></button>
+      <button type="button" class="link-button" id="samples" data-i18n="new.samples" aria-describedby="samples-hint"></button>
       <button type="button" class="link-button" id="upload" data-i18n="new.upload"></button>
       <input type="file" id="file" class="sr-only" tabindex="-1" accept=".txt,.csv,.json,text/plain,text/csv,application/json" data-i18n-aria="new.upload_label">
     </span>
   </div>
+  <p class="action-note samples-hint" id="samples-hint" data-i18n="new.samples_hint"></p>
+  <p class="message" id="from-note" role="status" hidden></p>
   <p class="message" id="upload-note" role="status" hidden></p>
   <p class="message" id="send-error" role="alert" hidden></p>
 
-  <button type="button" class="btn btn-primary send-button" id="send"></button>
+  <div class="send-block">
+    <button type="button" class="btn btn-primary send-button" id="send" aria-describedby="send-hint"></button>
+    <p class="action-note" id="send-hint" data-i18n="new.send_hint"></p>
+  </div>
 </main>
 </body>
 </html>
