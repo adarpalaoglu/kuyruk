@@ -211,3 +211,132 @@ def test_the_download_row_follows_the_measured_library_count(copies):
         'of which downloading 44 libraries (uv\'s "Prepared")',
     )
     assert new_problems(doc, data) == []
+
+
+# ---- The README and the write-up (Slice 18a, D131) --------------------------
+
+
+# Made-up values, so these tests check the rules, not today's measurements:
+# rerunning a benchmark or changing a default must not break them.
+NUMBERS = {"slow_s": 252, "fast_ms": 7.0, "share": 0.5, "split": None, "flag": True}
+DEFAULTS = {"max_texts": 1000, "beat_s": 5.0, "model": "gemma4:e4b"}
+
+
+def story(tmp_path: Path, text: str) -> list[str]:
+    """The problems `check_story` finds in a small made-up document."""
+    doc = tmp_path / "README.md"
+    doc.write_text(text, encoding="utf-8")
+    return check_numbers.check_story([doc], numbers=NUMBERS, defaults=DEFAULTS)[1]
+
+
+def test_the_real_readme_and_write_up_match_the_data():
+    """Every labelled number is right and no number is left unlabelled."""
+    checked, problems = check_numbers.check_story()
+    assert problems == []
+    assert checked > 50
+
+
+def test_main_checks_the_readme_and_write_up_too():
+    """The command-line check (and so CI's test of it) includes both files."""
+    checked_all, _ = check(web=check_numbers.WEB, story=check_numbers.STORY_DOCS)
+    checked_without, _ = check(web=check_numbers.WEB)
+    assert checked_all > checked_without
+
+
+def test_a_right_labelled_number_passes(tmp_path):
+    """Measured numbers and setting defaults, thousands written with commas."""
+    assert story(tmp_path, "It took 252<!--n:slow_s--> seconds.") == []
+    assert story(tmp_path, "It took 7<!--n:fast_ms--> ms and 0.5<!--n:share-->.") == []
+    assert story(tmp_path, "Up to 1,000<!--s:max_texts--> texts.") == []
+    assert story(tmp_path, "Every 5<!--s:beat_s--> seconds.") == []
+
+
+def test_a_wrong_labelled_number_is_named(tmp_path):
+    """The document's number, the label and the data's number are all given."""
+    assert story(tmp_path, "It took 250<!--n:slow_s--> seconds.") == [
+        "README.md: says 250 for slow_s, the data give 252"
+    ]
+    assert story(tmp_path, "Up to 1000<!--s:max_texts--> texts.") == [
+        "README.md: says 1000 for max_texts, the settings give 1,000"
+    ]
+
+
+def test_an_unknown_label_is_reported(tmp_path):
+    """A label that names nothing can't vouch for its number."""
+    assert story(tmp_path, "About 7<!--n:no_such_number--> ms.") == [
+        "README.md: 7 is labelled no_such_number, which the data don't have"
+    ]
+
+
+def test_runs_that_disagree_are_reported_as_such(tmp_path):
+    """A value the runs don't agree on is named as that, not as a typo."""
+    assert story(tmp_path, "Done 4<!--n:split--> times.") == [
+        "README.md: 4 is labelled split, but the runs disagree on it, "
+        "so the data give no single value"
+    ]
+
+
+def test_a_word_or_true_false_is_not_a_number(tmp_path):
+    """Labelling text or a yes/no value is reported, never a crash or a pass."""
+    assert story(tmp_path, "It was 1<!--n:flag--> and 4<!--s:model-->.") == [
+        "README.md: 1 is labelled flag, which is not a number",
+        "README.md: 4 is labelled model, which is not a number",
+    ]
+
+
+def test_a_number_without_a_label_is_reported(tmp_path):
+    """Like a typed number on the pages: it would go stale unnoticed."""
+    assert story(tmp_path, "It took 252 seconds.") == [
+        "README.md: number without a label: 252"
+    ]
+
+
+def test_code_links_names_and_steps_are_not_numbers_to_check(tmp_path):
+    """Commands, addresses, link targets, names and step numbers are skipped."""
+    text = (
+        "### 1. Install Docker\n"
+        "1. Open `http://localhost:8080` and see `202`.\n"
+        "```\ndocker compose up --wait 5\n```\n"
+        "Read [D29](docs/decision-log.md#d29--x) about E1 to E4, "
+        "Gemma 4 E4B, Python 3.12, Postgres 16 and WSL 2. Go back to step 3.\n"
+        "<!-- 18b: anything 123 -->\n"
+        '<img src="a.png" width="640">\n'
+        "See https://example.com/page2.\n"
+        "~~~\nsleep 9\n~~~\n"
+        "See [the entry](docs/decision-log.md#d1--a-b(c2)).\n"
+    )
+    assert story(tmp_path, text) == []
+
+
+def test_a_less_than_sign_does_not_hide_numbers(tmp_path):
+    """Only real HTML tags are skipped, not text between "<" and ">"."""
+    assert story(tmp_path, "Waits < 5 seconds and > 3 tries.") == [
+        "README.md: number without a label: 5",
+        "README.md: number without a label: 3",
+    ]
+
+
+def test_setting_defaults_are_read_without_importing_settings(tmp_path):
+    """Only class Settings counts; Field(default=...) and Field(5, ...) are read."""
+    path = tmp_path / "settings.py"
+    path.write_text(
+        "class Settings:\n"
+        "    a: int = 3\n"
+        "    b: int = Field(default=200_000, ge=1)\n"
+        "    c: int = 25 * 1024\n"
+        "    d: str = Field(min_length=32)\n"
+        "    e: float = Field(30.0, gt=0)\n"
+        "class Helper:\n"
+        "    a: int = 8\n"
+        "def helper():\n"
+        "    b: int = 9\n",
+        encoding="utf-8",
+    )
+    assert check_numbers.setting_defaults(path) == {"a": 3, "b": 200_000, "e": 30.0}
+
+
+def test_the_real_settings_file_gives_its_defaults():
+    """The labels the README uses exist in app/settings.py."""
+    defaults = check_numbers.setting_defaults()
+    for name in ("max_texts_per_job", "texts_at_once", "heartbeat_seconds"):
+        assert check_numbers.as_written(defaults[name]) is not None

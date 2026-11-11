@@ -729,3 +729,27 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 - **Why:** right after a cancel, the texts still with the AI look "waiting" for a few seconds. Sending them again in those seconds would send them to the AI twice and spend their tokens twice. A per-text mark would add one write per text and change E2's published write counts; marking the job costs one write, only for cancelled jobs, and E2 never cancels.
 - **Cost:** the button appears a few seconds after the cancel. `worker_busy` uses the API's clock, not the database's (D68); for a display flag a second's difference doesn't matter.
 - **Date:** 11 Nov 2026 · **Status:** Approved (11 Nov 2026, Adar's design)
+
+---
+
+## README and finishing checks (Slice 18a)
+
+### D131 — README and write-up numbers are checked against the data
+- **Decision:** every measured number in `README.md` and `docs/write-up.md` carries a hidden label naming where it comes from, and the number check recomputes it from the CSV files. Limits carry a label naming their setting and are checked against `app/settings.py`. A number with no label fails, except inside code formatting, web addresses, step numbers and names (E1, Gemma 4 E4B).
+- **Why:** a README can't fill numbers in from the data the way the pages do. Without a check, its numbers would go stale after a rerun without anyone noticing (as in D120).
+- **Date:** 11 Nov 2026 · **Status:** Approved (11 Nov 2026)
+
+### D132 — The README and write-up use plain punctuation, and a test enforces it
+- **Decision:** a test fails if `README.md` or `docs/write-up.md` contains an em dash, an en dash, a semicolon, or an arrow or other symbol outside the diagram, or a colon in the middle of a sentence. The same test fails if a decision link in the README points to an entry that doesn't exist.
+- **Why:** the README is written for first-time readers who may not be programmers, so the style should be plain and checked rather than remembered.
+- **Date:** 11 Nov 2026 · **Status:** Approved (11 Nov 2026)
+
+### D133 — Python pinned to its exact version; what can't be pinned is stated
+- **Decision:** `.python-version` says `3.12.16`, the same as the Docker image. The README's limits name what can't be pinned: GitHub's Ubuntu machine, the system packages the browser tests install, and the reader's own Docker Desktop and Ollama.
+- **Why:** finished means frozen (D41). Where freezing is impossible, saying so honestly is the next best thing.
+- **Date:** 11 Nov 2026 · **Status:** Approved (11 Nov 2026)
+
+### D134 — The diagram is Mermaid text inside the README
+- **Decision:** the architecture diagram is written as Mermaid, which GitHub draws from text. There is no image file.
+- **Why:** text can't get out of step with an image file, and anyone can change it in the same file.
+- **Date:** 11 Nov 2026 · **Status:** Approved (11 Nov 2026)

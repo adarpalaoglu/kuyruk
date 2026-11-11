@@ -30,6 +30,7 @@ Run from the project folder:
 It is also run by `uv run --group bench python -m bench.run_all --charts-only`.
 """
 
+import ast
 import csv
 import html.parser
 import json
@@ -1172,13 +1173,162 @@ def check_interface(data: Path = DATA, web: Path = WEB) -> tuple[int, list[str]]
     return checked, problems
 
 
+# ---- The README and the write-up (Slice 18a, D131) -------------------------
+
+# The two documents a first-time reader sees. A Markdown file can't fill a
+# number in from findings.json the way the pages do, so every number in them
+# is typed, and right after it sits a hidden label (an HTML comment, which
+# GitHub doesn't show) naming where it comes from:
+#   252<!--n:e1_bad_s--> seconds    a measured number (bench.web_data)
+#   1,000<!--s:max_texts_per_job--> a setting's default (app/settings.py)
+STORY_DOCS = [ROOT / "README.md", ROOT / "docs" / "write-up.md"]
+SETTINGS_FILE = ROOT / "app" / "settings.py"
+
+LABELLED = re.compile(r"(\d[\d,]*(?:\.\d+)?)<!--([ns]):(\w+)-->")
+
+# Digits a reader sees that are names, not measurements (like ALLOWED_DIGITS
+# for the pages). Anything in code formatting, a web address or a link's
+# target is skipped before these are applied.
+STORY_ALLOWED = [
+    r"Gemma 4 E4B",  # the model's name
+    r"\bE[1-4]\b",  # the experiments' names
+    r"\bD\d{2,3}\b",  # decision-log entries
+    r"Python 3\.12",
+    r"Postgres 16",
+    r"WSL 2",  # the name of Windows' Linux layer
+    r"(?m)^#+ \d+\. ",  # a numbered step's heading: "### 1. Install Docker"
+    r"(?m)^\s*\d+\. ",  # a numbered list item
+    r"(?i)\bsteps? \d\b",  # a reference to a numbered step: "go back to step 3"
+]
+
+
+def setting_defaults(path: Path = SETTINGS_FILE) -> dict:
+    """Each setting's default value, read from app/settings.py's text.
+
+    Read with Python's own parser (`ast`) instead of importing the file:
+    importing it builds the settings, which needs a JWT_SECRET, and the
+    number check must run without one (like bench/cost_sums.py). Only the
+    lines directly inside `class Settings` count, so a helper elsewhere in
+    the file that reuses a name can't replace a real default.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    classes = [n for n in tree.body if isinstance(n, ast.ClassDef)]
+    body = next((c.body for c in classes if c.name == "Settings"), [])
+    defaults = {}
+    for node in body:
+        if not (isinstance(node, ast.AnnAssign) and node.value is not None):
+            continue
+        if not isinstance(node.target, ast.Name):
+            continue
+        value = node.value
+        # `Field(default=200_000, ge=1)` or `Field(200_000, ge=1)`: the
+        # default is the keyword, or else the first value in brackets.
+        if isinstance(value, ast.Call):
+            keyword = [k.value for k in value.keywords if k.arg == "default"]
+            value = (keyword or value.args or [None])[0]
+        try:
+            defaults[node.target.id] = ast.literal_eval(value)
+        # A default that isn't a plain value (e.g. `25 * 1024 * 1024`) is
+        # simply not available as a label.
+        except (ValueError, TypeError, SyntaxError):
+            continue
+    return defaults
+
+
+def as_written(value: object) -> str | None:
+    """How a number must be written: thousands with commas, no ".0" (5.0 → 5).
+
+    None for anything that isn't a number (a word, or True/False), which no
+    number in a document can stand for.
+    """
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    return f"{value:,}"
+
+
+# A link's target, allowing one level of brackets inside it, as in
+# "(docs/decision-log.md#d29--foo(bar))".
+LINK_TARGET = r"\]\((?:[^()]|\([^()]*\))*\)"
+
+
+def unlabelled_numbers(text: str) -> list[str]:
+    """Digits a reader would see that carry no label and aren't allowed names."""
+    text = re.sub(r"(?s)(```|~~~).*?\1", "", text)  # code boxes, either fence
+    text = re.sub(r"`[^`]*`", "", text)  # code formatting
+    text = LABELLED.sub("", text)  # labelled numbers
+    text = re.sub(r"(?s)<!--.*?-->", "", text)  # other hidden comments
+    text = re.sub(LINK_TARGET, "]", text)  # link targets
+    # HTML tags (their sizes, addresses). A tag starts with a letter or "/",
+    # so a "<" meaning "less than" ("< 5 seconds") is not mistaken for one.
+    text = re.sub(r"</?[A-Za-z][^<>]*>", "", text)
+    text = re.sub(r"https?://\S+", "", text)  # bare web addresses
+    for allowed in STORY_ALLOWED:
+        text = re.sub(allowed, "", text)
+    return re.findall(r"\S*\d\S*", text)
+
+
+def label_problem(doc: str, written: str, key: str, source: dict, kind: str) -> str:
+    """What is wrong with one labelled number, or "" if it is right."""
+    where = "data" if kind == "n" else "settings"
+    if key not in source:
+        return f"{doc}: {written} is labelled {key}, which the {where} don't have"
+    # Present but None: the runs that should agree on it don't (web_data's
+    # "only one value" rule), so there is no single number to write.
+    if source[key] is None:
+        return (
+            f"{doc}: {written} is labelled {key}, but the runs disagree on it, "
+            "so the data give no single value"
+        )
+    expected = as_written(source[key])
+    if expected is None:
+        return f"{doc}: {written} is labelled {key}, which is not a number"
+    if written != expected:
+        return f"{doc}: says {written} for {key}, the {where} give {expected}"
+    return ""
+
+
+def check_story(
+    docs: list[Path] = STORY_DOCS,
+    data: Path = DATA,
+    settings: Path = SETTINGS_FILE,
+    numbers: dict | None = None,
+    defaults: dict | None = None,
+) -> tuple[int, list[str]]:
+    """Check the README and write-up's numbers: (how many checks, what differs).
+
+    `numbers` and `defaults` replace the ones computed from `data` and read
+    from `settings`; the tests use them to check the rules on made-up values.
+    """
+    numbers = web_data.story_numbers(data) if numbers is None else numbers
+    defaults = setting_defaults(settings) if defaults is None else defaults
+    checked = 0
+    problems: list[str] = []
+    for doc in docs:
+        text = doc.read_text(encoding="utf-8")
+        for written, kind, key in LABELLED.findall(text):
+            checked += 1
+            source = numbers if kind == "n" else defaults
+            if problem := label_problem(doc.name, written, key, source, kind):
+                problems.append(problem)
+        checked += 1
+        for number in unlabelled_numbers(text):
+            problems.append(f"{doc.name}: number without a label: {number}")
+    return checked, problems
+
+
 def check(
-    doc: Path = DOC, data: Path = DATA, web: Path | None = None
+    doc: Path = DOC,
+    data: Path = DATA,
+    web: Path | None = None,
+    story: list[Path] | None = None,
 ) -> tuple[int, list[str]]:
     """Compare the doc with the data: (how many numbers checked, what differs).
 
     With `web` (the interface's folder), the interface's numbers are checked
-    too (`check_interface`).
+    too (`check_interface`); with `story` (the README and the write-up),
+    theirs too (`check_story`).
     """
     found = sections(doc.read_text(encoding="utf-8"))
     checked = 0
@@ -1205,25 +1355,36 @@ def check(
         more, interface_problems = check_interface(data, web)
         checked += more
         problems += interface_problems
+    if story is not None:
+        more, story_problems = check_story(story, data)
+        checked += more
+        problems += story_problems
     return checked, problems
+
+
+WHERE = "docs/experiments.md, the interface, the README and the write-up"
+
+
+def report() -> int:
+    """Check every number and print the result: how many differ (0 = all match).
+
+    Shared by `main` and bench/run_all.py, so both check the same files and
+    say the same thing.
+    """
+    checked, problems = check(web=WEB, story=STORY_DOCS)
+    if not problems:
+        print(f"All {checked} numbers in {WHERE} match the CSV files.")
+        return 0
+    print(f"{len(problems)} of {checked} numbers in {WHERE} differ from the data:")
+    for problem in problems:
+        print(f"- {problem}")
+    return len(problems)
 
 
 def main() -> None:
     """Print whether every number matches; exit code 1 if any differs."""
-    checked, problems = check(web=WEB)
-    if not problems:
-        print(
-            f"All {checked} numbers in docs/experiments.md and the interface "
-            "match the CSV files."
-        )
-        return
-    print(
-        f"{len(problems)} of {checked} numbers in docs/experiments.md and the "
-        "interface differ from the CSV files:"
-    )
-    for problem in problems:
-        print(f"- {problem}")
-    sys.exit(1)
+    if report():
+        sys.exit(1)
 
 
 if __name__ == "__main__":

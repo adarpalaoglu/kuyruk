@@ -8,6 +8,7 @@ mockup shows them (checked by hand against docs/experiments.md on 10 Nov
 page, and a worded claim the data no longer supports.
 """
 
+import csv
 import json
 import shutil
 from pathlib import Path
@@ -211,3 +212,76 @@ def test_a_worded_claim_the_data_no_longer_supports_is_reported(tmp_path, web_co
     problems = check_interface(data, web_copy)[1]
     claim = 'E4 "Downloading took under half a second"'
     assert f"Interface: {claim} is no longer true of the data" in problems
+
+
+# ---- The README's extra numbers (Slice 18a, D131) ---------------------------
+
+
+def rewrite_csv(path: Path, change) -> None:
+    """Rewrite a CSV file, letting `change` edit or drop its rows."""
+    with path.open(encoding="utf-8", newline="") as file:
+        reader = csv.DictReader(file)
+        columns, rows = reader.fieldnames, list(reader)
+    rows = change(rows)
+    with path.open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=columns)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+@pytest.fixture
+def data_copy(tmp_path: Path) -> Path:
+    """A throwaway copy of the data folder, safe to change."""
+    data = tmp_path / "data"
+    shutil.copytree(DATA, data)
+    return data
+
+
+def test_e2_extras_use_the_same_runs_as_the_run_counts(data_copy):
+    """A run outside the counted groups (here a broken "stale" run that lost
+    everything) changes neither the lost nor the redone number."""
+
+    def add_odd_run(rows):
+        odd = dict(rows[0], kind="broken", part="stale", lost="40", redone="9")
+        return rows + [odd]
+
+    rewrite_csv(data_copy / "e2_runs.csv", add_odd_run)
+    extras = web_data.readme_extras(data_copy)
+    assert extras["e2_broken_lost"] == web_data.readme_extras(DATA)["e2_broken_lost"]
+    assert extras["e2_redone"] == web_data.readme_extras(DATA)["e2_redone"]
+
+
+def test_runs_that_disagree_give_no_single_number(data_copy):
+    """One fixed run redoing a different number, or one texts-at-once run
+    sending fewer texts, leaves the number empty for the check to report."""
+
+    def one_redoes_more(rows):
+        fixed = next(r for r in rows if r["kind"] == "fixed" and r["part"] == "main")
+        fixed["redone"] = str(int(fixed["redone"]) + 1)
+        return rows
+
+    rewrite_csv(data_copy / "e2_runs.csv", one_redoes_more)
+    rewrite_csv(data_copy / "texts_at_once_items.csv", lambda rows: rows[1:])
+    extras = web_data.readme_extras(data_copy)
+    assert extras["e2_redone"] is None
+    assert extras["at_once_texts"] is None
+
+
+def test_the_e1_wait_is_the_one_the_results_were_measured_at(data_copy):
+    """A longer wait added to the data doesn't change the story's wait; with
+    no run at the story's wait, the number is empty."""
+
+    def add_longer_wait(rows):
+        longer = next(r for r in rows if r["kind"] == "sleep")
+        return rows + [dict(longer, wait_seconds="8")]
+
+    rewrite_csv(data_copy / "e1_runs.csv", add_longer_wait)
+    assert web_data.readme_extras(data_copy)["e1_wait_s"] == web_data.E1_STORY_WAIT
+
+    def drop_story_wait(rows):
+        wait = str(web_data.E1_STORY_WAIT)
+        return [r for r in rows if r["wait_seconds"].removesuffix(".0") != wait]
+
+    rewrite_csv(data_copy / "e1_runs.csv", drop_story_wait)
+    # The pages' E1 numbers need that wait too, so only the extras are read.
+    assert web_data.readme_extras(data_copy)["e1_wait_s"] is None

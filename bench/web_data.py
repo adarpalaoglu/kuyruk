@@ -29,6 +29,7 @@ import json
 import math
 import re
 import statistics
+from collections.abc import Callable
 from pathlib import Path
 
 from bench import cost_sums
@@ -67,19 +68,27 @@ def one_significant(x: float) -> int:
     return int(round_half_up(x / 10**power) * 10**power)
 
 
+# The wait (in seconds) each slow request made in the runs E1's story uses:
+# the longest one measured. The README says it alongside the result, so both
+# come from this one number and can't be paired wrongly.
+E1_STORY_WAIT = 4
+
+
 def e1_findings(data: Path) -> dict:
     """E1, the freeze: /health's p95 while 50 slow requests run, at a 4 s wait.
 
     The story compares the usual way (A, `time.sleep` in `async def`) with the
-    fix (C, `await asyncio.sleep`) at the longest wait, 4 s: the median of the
-    5 runs' p95 (as in the write-up's Results table).
+    fix (C, `await asyncio.sleep`) at the longest wait, 4 s (E1_STORY_WAIT):
+    the median of the 5 runs' p95 (as in the write-up's Results table).
     """
     runs = [r for r in read(data, "e1_runs.csv") if r["kind"] == "sleep"]
 
     def p95(setting: str) -> float:
         """Median p95 of /health, in seconds, for one setting at 4 s."""
         group = [
-            r for r in runs if r["setting"] == setting and float(r["wait_seconds"]) == 4
+            r
+            for r in runs
+            if r["setting"] == setting and float(r["wait_seconds"]) == E1_STORY_WAIT
         ]
         return median_of(group, "health_p95_ms") / 1000
 
@@ -111,6 +120,34 @@ def times_faster(bad: float, good: float) -> int:
     return int(math.floor(ratio / 10**power) * 10**power)
 
 
+def e2_picker(data: Path) -> Callable[..., list[dict]]:
+    """A way to pick E2's good runs (no error) by their column values."""
+    runs = [r for r in read(data, "e2_runs.csv") if not r["error"]]
+
+    def pick(**match: str) -> list[dict]:
+        """The good runs whose columns have exactly the given values."""
+        return [r for r in runs if all(r[k] == v for k, v in match.items())]
+
+    return pick
+
+
+def e2_groups(data: Path) -> dict[str, list[dict]]:
+    """E2's runs in the groups the story counts, so every number uses the same.
+
+    Broken and fixed are the main and sensitivity runs (a job of 40 texts),
+    as in the write-up's lost/redone table. "ai" is the real-AI check, a
+    smaller job that the fixed run count includes.
+    """
+    pick = e2_picker(data)
+    return {
+        "broken": pick(kind="broken", part="main")
+        + pick(kind="broken", part="sensitivity"),
+        "fixed": pick(kind="fixed", part="main")
+        + pick(kind="fixed", part="sensitivity"),
+        "ai": pick(part="ai"),
+    }
+
+
 def e2_findings(data: Path) -> dict:
     """E2, pulling the plug: lost texts, runs, and recovery time.
 
@@ -119,15 +156,9 @@ def e2_findings(data: Path) -> dict:
     lowest and highest median over the recovery-vs-wait rows (four waits,
     replayed times, real AI), in whole seconds.
     """
-    runs = [r for r in read(data, "e2_runs.csv") if not r["error"]]
-
-    def pick(**match: str) -> list[dict]:
-        """The good runs whose columns have exactly the given values."""
-        return [r for r in runs if all(r[k] == v for k, v in match.items())]
-
-    broken = pick(kind="broken", part="main") + pick(kind="broken", part="sensitivity")
-    ai = pick(part="ai")
-    fixed = pick(kind="fixed", part="main") + pick(kind="fixed", part="sensitivity")
+    pick = e2_picker(data)
+    groups = e2_groups(data)
+    broken, fixed, ai = groups["broken"], groups["fixed"], groups["ai"]
     waits = sorted({r["wait"] for r in pick(part="sensitivity", kind="fixed")})
     groups = [pick(part="sensitivity", kind="fixed", wait=w) for w in waits]
     groups += [pick(part="main", kind="fixed"), ai]
@@ -281,6 +312,67 @@ def findings(data: Path = DATA) -> dict:
         | cost_findings(data)
         | sample_findings(data)
     )
+
+
+def readme_extras(data: Path) -> dict:
+    """The few numbers the README and the write-up need beyond the pages'.
+
+    Slice 18a (D131). Same idea as `findings`: computed from the CSV files,
+    one rounding rule each, never typed. Not written to findings.json (the
+    pages don't use them).
+    """
+    e1 = [r for r in read(data, "e1_runs.csv") if r["kind"] == "sleep"]
+    groups = e2_groups(data)
+    # The 40-text jobs (the real-AI check was a smaller job).
+    big = groups["broken"] + groups["fixed"]
+
+    def only(values: set):
+        """The one value every run agrees on, or None if they differ."""
+        return values.pop() if len(values) == 1 else None
+
+    # How many texts each texts-at-once run sent: one per row, per round and
+    # setting. Every run should send the same number.
+    sent: dict[tuple[str, str], int] = {}
+    for row in read(data, "texts_at_once_items.csv"):
+        run = (row["round"], row["texts_at_once"])
+        sent[run] = sent.get(run, 0) + 1
+    at_once: dict[int, list[float]] = {}
+    for row in read(data, "texts_at_once.csv"):
+        at_once.setdefault(int(row["texts_at_once"]), []).append(
+            float(row["total_seconds"])
+        )
+    fewest, most = min(at_once), max(at_once)
+    rows = cost_sums.read_rows(data / "cost_tokens.csv")
+    return {
+        # E1: the wait the story's results were measured at (None if no
+        # run used it, so the check reports it).
+        "e1_wait_s": E1_STORY_WAIT
+        if any(float(r["wait_seconds"]) == E1_STORY_WAIT for r in e1)
+        else None,
+        # E2: the job's size, when it was killed, and what was lost or
+        # redone, over exactly the runs the run counts use (e2_groups).
+        "e2_texts": only({int(r["texts"]) for r in big}),
+        "e2_kill_at": only({int(r["kill_at"]) for r in big}),
+        "e2_broken_lost": only({int(r["lost"]) for r in groups["broken"]}),
+        "e2_redone": only({int(r["redone"]) for r in groups["fixed"] + groups["ai"]}),
+        # Texts at once (Slice 10): how many texts each run sent, the fewest
+        # and most at once tried, and the median total time at each, in
+        # whole seconds.
+        "at_once_texts": only(set(sent.values())),
+        "at_once_fewest": fewest,
+        "at_once_most": most,
+        "at_once_fewest_s": int(round_half_up(statistics.median(at_once[fewest]))),
+        "at_once_most_s": int(round_half_up(statistics.median(at_once[most]))),
+        # The cost with Gemma's own counter, whole percent (D112's sum ratio).
+        "cost_gemma_percent_more": int(
+            round_half_up((cost_sums.sum_ratio(rows, "gemma") - 1) * 100)
+        ),
+    }
+
+
+def story_numbers(data: Path = DATA) -> dict:
+    """Every number the README and the write-up may show: the pages' + extras."""
+    return findings(data) | readme_extras(data)
 
 
 def sample_reviews(data: Path = DATA) -> list[str]:

@@ -1,6 +1,6 @@
 # Kuyruk — specification
 
-Owner and decision-maker: Adar Palaoğlu. Code: Claude Code. Last updated: 10 November 2026.
+Owner and decision-maker: Adar Palaoğlu. Code: Claude Code. Last updated: 11 November 2026.
 Reasons for every decision: `docs/decision-log.md`. Status: `docs/progress.md`.
 
 ---
@@ -11,7 +11,7 @@ Reasons for every decision: `docs/decision-log.md`. Status: `docs/progress.md`.
 
 Kuyruk is a test bench. The app shows the foundation of AI systems (a tested API, a database, a background worker, CI); the four experiments show where that foundation breaks. It works like the Anthropic/OpenAI batch APIs: a **job** (batch) contains many **texts** (requests); the user gets a **ticket** (batch id) immediately and collects results later.
 
-README line: *"The stack is standard; the experiments and decisions are mine."*
+README line: *"The stack is standard. The experiments and decisions are mine."* (two sentences, Adar's choice, 11 Nov 2026)
 
 Out of scope (stated in README): Celery/Redis, cloud hosting or an online demo, model training or fine-tuning.
 
@@ -220,7 +220,7 @@ Two equal ways to use Kuyruk: `/docs` for developers; the web interface for ever
 
 `app/`, `tests/`, `bench/`, `docker/`, `web/`, `compose.yaml`, `.github/workflows/ci.yml` and `release.yml`, `docs/decision-log.md`, `docs/experiments.md`, `docs/progress.md`, README, 1–2 page write-up, MIT licence.
 
-README order: one-sentence summary → GIF → walkthrough video (2–3 min: full flow, Behind the scenes, crash button, real AI) → diagram → run it yourself (`docker compose up`) → API overview → four experiments, one chart and one-line finding each → bonus findings (Turkish cost, texts at once) → key decisions → limits and what I'd do next → "The stack is standard; the experiments and decisions are mine." → credits.
+README order: one-sentence summary → GIF → walkthrough video (2–3 min: full flow, Behind the scenes, crash button, real AI) → diagram → run it yourself (`docker compose up`) → API overview → four experiments, one chart and one-line finding each → bonus findings (Turkish cost, texts at once) → key decisions → limits and what I'd do next → "The stack is standard. The experiments and decisions are mine." → credits.
 
 ---
 

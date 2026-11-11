@@ -125,6 +125,45 @@ def shoot(page, file: str) -> None:
     print(f"  {file}")
 
 
+# The README shows only the top of two long pages (Slice 18a): down to the
+# end of the element named here, plus a little of the background under it.
+# A CSS selector ("a way to point at one part of a page") for each.
+TOPS = {
+    "welcome": ".problem-card",  # the hero and the first problem card
+    "experiments": ".exp",  # the heading and Experiment 1's band
+}
+TOP_MARGIN = 24  # pixels of background kept under that element
+
+
+def shoot_top(page, screen: str) -> None:
+    """Save the top of a page, down to the end of its TOPS element.
+
+    Pictures cut at a fixed height would end in the middle of a card when
+    the layout changes; cutting at the element's own bottom edge doesn't.
+    """
+    # The element's bottom edge measured from the top of the whole page (not
+    # of the visible window, which moves if the page is scrolled). None if
+    # the element is missing.
+    bottom = page.evaluate(
+        """(selector) => {
+            const element = document.querySelector(selector);
+            if (!element) return null;
+            return element.getBoundingClientRect().bottom + window.scrollY;
+        }""",
+        TOPS[screen],
+    )
+    if bottom is None:
+        raise SystemExit(
+            f"The {screen} page has no {TOPS[screen]} to cut at. Was it renamed? "
+            "Update TOPS in scripts/screenshots.py."
+        )
+    height = bottom + TOP_MARGIN
+    file = f"{screen}-top-1280-en.png"
+    clip = {"x": 0, "y": 0, "width": 1280, "height": height}
+    page.screenshot(path=str(OUT / file), full_page=True, clip=clip)
+    print(f"  {file}")
+
+
 def main() -> None:
     """Make the data, then save every screen."""
     OUT.mkdir(parents=True, exist_ok=True)
@@ -191,6 +230,8 @@ def main() -> None:
                     page.click("[data-testid=account]")
                     expect(page.locator("#account-menu .bar")).to_be_visible()
                 shoot(page, f"{screen}-{width}-en.png")
+                if width == 1280 and screen in TOPS:
+                    shoot_top(page, screen)
                 page.context.close()
         turkish = ("welcome", "results", "signup", "new-guide", "job-cancelled")
         for screen in turkish:

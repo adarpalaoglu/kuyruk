@@ -251,20 +251,7 @@ def charts_and_check(drawer: Callable[[], int] | None = None) -> int:
     draw = drawer or (lambda: run_live([sys.executable, "-m", "bench.charts"]))
     if draw() != 0:
         raise Stop("Drawing the charts failed.")
-    checked, problems = check_numbers.check(web=check_numbers.WEB)
-    if problems:
-        print(
-            f"{len(problems)} of {checked} numbers in docs/experiments.md and the "
-            "interface differ:"
-        )
-        for problem in problems:
-            print(f"- {problem}")
-    else:
-        print(
-            f"All {checked} numbers in docs/experiments.md and the interface "
-            "match the CSV files."
-        )
-    return len(problems)
+    return check_numbers.report()
 
 
 # ---- The full rerun -------------------------------------------------------------

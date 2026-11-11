@@ -3,7 +3,7 @@
 Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12 lists the slices).
 
 ## Current slice
-**Slice 18** (not started). Slice 17b (interface fixes after first use) built 11 Nov 2026, waiting for Adar's code review and commit.
+**Slice 18a** (README and finishing checks) done 11 Nov 2026. Next **Slice 18b** (GIF, video, Adar's own words, write-up).
 
 ## Slices
 
@@ -28,7 +28,8 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 | 16 | Interface mockup approved | ☑ | Approved by Adar 10 Nov 2026; source in `docs/mockup/` (canvas link in its README) |
 | 17 | Interface build | ☑ | 818 fast tests (+6 Postgres, +18 browser), 99.71% coverage; 18/18 browser tests incl. axe on 8 screens × 2 languages; clean-machine check 21/21 PASS; number check 362/362; sample job (100 reviews) 186.5 s in demo mode |
 | 17b | Interface fixes after first use | ☑ | 837 fast tests (+6 Postgres, +44 browser), 99.71% coverage; 44/44 browser tests (26 new, both languages, axe and 390 px on every new state); number check 365/365; 32 screenshots |
-| 18 | README, video, write-up, freeze | ☐ | |
+| 18a | README and finishing checks | ☑ | 862 fast tests (+6 Postgres, +44 browser), 99.71% coverage; number check 446/446 (README and write-up included); clean-room run of "Run it yourself" passed (ready 12 s after `docker compose up` with base images present) |
+| 18b | GIF, video, Adar's words, write-up | ☐ | Places marked `18b` in README.md, docs/write-up.md and docs/experiments.md |
 
 ## Decision log
 - Entries D01–D41 drafted 5–6 Nov 2026 · Approved by Adar: ☑ (6 Nov 2026)
@@ -46,7 +47,41 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 - D110–D114 (Turkish vs English cost, one-command rerun, number check) · Approved by Adar as drafted: ☑ (9 Nov 2026); their "Why" lines were added afterwards, for Adar to glance at
 - D115–D124 (web interface) and the spec 6 / 8 / 10 wording updates · Approved by Adar: ☑ (10 Nov 2026, approved with the Slice 17 plan; written in his voice afterwards); D125 (demo AI answer) asked for by Adar after the review, 10 Nov 2026
 - D126–D129 (sign-up and log-in pages, crash button on the job page, texts without a result as a new job, first-time guide) · Approved by Adar: ☑ (11 Nov 2026, with the Slice 17b plan; D128 widened to done jobs with failed texts); D127 updated at Adar's request (one line per button plus the "i" explanation); D130 (cancelled job final once the worker lets go) Adar's design, 11 Nov 2026
+- D131–D134 (README and finishing checks) · Approved by Adar as worded: ☑ (11 Nov 2026); D132 afterwards also names the colon rule Adar asked for
 - D87–D93 (real AI measurements; D88 and D93 reworded as Adar asked) and the D82 "done" note · Approved by Adar: ☑ (8 Nov 2026); D89 update (memory emptied before every run) and D91 addition approved 8 Nov 2026; D94 (10-minute heat-up) approved 8 Nov 2026
+
+## "Done" checklist (spec 13, checked 11 Nov 2026, Slice 18a)
+☑ = done, with the evidence. ⏳ = waiting for Slice 18b.
+
+| | Item | ✓ | Evidence |
+|---|---|---|---|
+| A | `docker compose up` starts everything on a clean machine | ☑ | `scripts/clean_machine_check.py` 21/21 PASS (Slice 17); clean-room run of the README's steps, 11 Nov 2026 (Slice 18a notes) |
+| A | Full user flow (sign up, log in, send, watch, cancel, results) | ☑ | Browser tests `tests/browser/` (44/44, Slice 18a run); interface parity table below |
+| A | All three tasks with real and fake AI | ☑ | `tests/test_worker.py`, `tests/test_ai_fake.py`, `tests/test_ai_ollama.py`; real Gemma checked in Slices 4, 5 and 10 |
+| A | Limits and budget with clear errors | ☑ | `tests/test_jobs.py`, `tests/test_budget.py`, `tests/test_errors.py`; manual check Slice 6 |
+| A | Unfinished jobs carry on after a crash | ☑ | `tests/test_recovery.py`, `tests/test_recovery_postgres.py`; E2: 0 lost in 30 runs |
+| A | Interface works end to end and matches /docs | ☑ | Parity table below; browser tests incl. axe on 8 screens × 2 languages |
+| A | Demo mode works without Ollama | ☑ | Clean-room run (no Ollama involved, demo mode by default) |
+| A | Crash simulation works | ☑ | Clean-room run: notice 7 s after the click, nothing lost; browser test `test_crash_from_the_job_page_crashes_this_job_and_recovers` |
+| A | Walkthrough video and GIF in README | ⏳ | Placeholders marked `18b` in README.md |
+| B | Every endpoint incl. error cases | ☑ | 839 fast tests, 99.71% coverage |
+| B | Every risk (budget race, double-click, AI off, crash, two workers) | ☑ | `test_budget_postgres.py`, `test_jobs_postgres.py`, `test_worker.py`, `test_recovery_postgres.py` |
+| B | Password never returned | ☑ | `tests/test_auth.py::test_hash_never_appears_in_any_reply` |
+| B | Coverage ≥ 85% enforced | ☑ | `pyproject.toml` `--cov-fail-under=85`; CI `test` job |
+| B | All tests pass on both databases | ☑ | CI run 43003216282 (Slice 17b): `test` (SQLite + Postgres) and `browser` green |
+| C | Real AI measured (100 texts, setup notes, warm-up) | ☑ | Slice 10; `bench/data/setup.md`, `ollama_times.csv` |
+| C | E1–E4 each with a prediction first, results and one main chart | ☑ | Predictions pushed first: d809ba5, 1f92400, 87b1a6a, 95cf984; `docs/experiments.md`; `docs/charts/` |
+| C | E1/E2 sensitivity + real-AI check | ☑ | `docs/experiments.md` E1 and E2 tables |
+| C | One command reruns everything | ☑ | `bench/run_all.py` (D113); `--charts-only` now also checks README and write-up |
+| C | Turkish vs English table | ☑ | `docs/experiments.md` Extra |
+| D | Decision log complete and approved by Adar | ☑ | D01–D134 approved (D131–D134 on 11 Nov 2026) |
+| D | README in the order of spec 11 | ☑ | `README.md` (Slice 18a); GIF and video places marked `18b` |
+| D | Write-up done | ⏳ | Skeleton with checked numbers in `docs/write-up.md`; Adar's text in 18b |
+| D | Adar can answer every hard question in his own words | ⏳ | Pointers in `docs/explain-map.md`; Adar's learning phase |
+| D | "Why it happens" / "Takeaway" in docs/experiments.md | ⏳ | Placeholders for E1, E3, E4, cost; E2 drafts to rewrite |
+| E | CI publishes the image from main | ☑ | Release run 43004723834 (Slice 17b); `ghcr.io/adarpalaoglu/kuyruk:latest` downloads without logging in (checked 11 Nov 2026) |
+| E | Repo public, MIT licence, no secrets | ☑ | Public on GitHub, `LICENSE` (MIT); only `.env.example` tracked; no secret values in tracked files (searched 11 Nov 2026) |
+| E | Versions pinned, nothing needs upkeep | ☑ | Freeze check in the Slice 18a notes; `.python-version` now 3.12.16 |
 
 ## Interface parity (checked 10 Nov 2026, Slice 17)
 Everything on `/docs` can be done in the interface (each proved by a browser test unless noted):
@@ -241,6 +276,19 @@ Slice 17b (interface fixes after first use, 11 Nov 2026):
 - **E2's line count (Adar's decision, 11 Nov 2026):** adding the release to `app/worker.py` (D130) makes the worker 481 lines of code (was 462 when E2 ran); `e2_code.csv` and `docs/experiments.md` now say 481, with a note. The crash-recovery count (105) and every measured E2 number are unchanged.
 - **Comparison with the mockup (11 Nov 2026, by Claude), screens changed in 17b:** Create your account: a third box "Confirm password" and the button says "Create account" (mockup: two boxes, "Continue"); the "Log in" link is underlined (mockup: not underlined; without the underline the link differs from the grey sentence only by colour, 1.5:1, which the accessibility check refuses). Log in: same layout without the confirm box and hint, "Log in" button, underlined "Create an account" link (the mockup has no separate log-in screen). New job: identical to the mockup unless the guide shows; the guide (grey band, numbers like Welcome's steps) is new and has no mockup. Job: "See results so far", "Cancel job" (red link) and "Simulate a crash" (outlined pill) with an "i" button, each button with a grey 13 px line under it, spread over the width (mockup: two links side by side, no lines); the "i" panel (grey band) opens under them; at 390 px the three stack. New job: a grey line under "Use sample reviews" (right-aligned) and under Send (mockup: none). Results: a grey line under the downloads, right-aligned. Account menu: a 12 px grey line under "AI budget today". A finished job's page and Results show a grey pill button and a count line (no mockup). All other screens: unchanged from the 10 Nov comparison (same remaining differences).
 
+Slice 18a (README and finishing checks, 11 Nov 2026):
+- **What exists:** `README.md` (spec 11 order, plain style, Mermaid diagram, 3 screenshots, 6 charts), `docs/write-up.md` (skeleton: facts and checked numbers only, Adar's places marked `18b`), `docs/explain-map.md` (pointers for every hard question and HAND-DESIGNED part, every name checked to exist).
+- **Number check (D131):** every number in README.md and docs/write-up.md carries a hidden label (`252<!--n:e1_bad_s-->`, or `<!--s:setting_name-->` for a setting's default) and is checked against the data or `app/settings.py`; a number without a label fails. Extra numbers in `bench/web_data.py` `readme_extras` (findings.json unchanged). 446 numbers checked (was 365).
+- **Style test (D132):** `tests/test_docs_style.py` refuses em dashes, en dashes, semicolons, arrows and other symbols outside the Mermaid diagram, and colons in the middle of a sentence (allowed at a line's end, in code, addresses, quotes and comments); it also checks every decision-log link in the README lands on its entry.
+- **Spec:** the README line is now two sentences, "The stack is standard. The experiments and decisions are mine." (Adar's choice). The web footer now says it in two sentences too (Adar's request): en "The stack is standard. The experiments and decisions are mine.", tr "Altyapı standart. Deneyler ve kararlar benim." **Leftover:** the full-page screenshots in `docs/screenshots/` were taken before this and still show the old footer; the next run of `scripts/screenshots.py` refreshes them.
+- **README screenshots:** the top of Welcome and The experiments, `welcome-top-1280-en.png` and `experiments-top-1280-en.png`, cut at the bottom of the first problem card and of Experiment 1's band (plus 24 px). `scripts/screenshots.py` now saves them too (`shoot_top`); the two committed files were cut from the existing full-page screenshots at those same edges.
+- **README review changes (Adar, 11 Nov 2026):** short first sentences; no mid-sentence colons; "I" throughout; E1 says what the number is ("in a typical run, the slowest one in twenty answers", i.e. the median of the 5 runs' 95th percentile); E4's secret sentence removed; D41 line "nothing is hosted online"; "Control (not Command) and C"; sign-up rules from the settings (username at least 3 characters, password at least 8); "Why this project" heading removed, the line opens "How this was built".
+- **Clean-room run (11 Nov 2026):** git's file list copied to a fresh folder (`kuyruk-main`, no `.env`), Docker's build cache cleared, every README step followed. `docker compose up` needs no `.env` and no setup; it **builds** the images on this Mac (log: "Building", "Built") and never pulls the x86 GHCR image. Ready 12 s after the command with the base images already on the Mac; a fresh computer also downloads about 200 MB of base images (uv 18, nginx 26, Postgres 114, Python slim 44 MB for Apple chips). Second start 4 s. In the browser: Try it yourself, Create account, the guide, Use sample reviews, Send, Simulate a crash (notice 7 s later: "Another worker took over … Nothing was lost."), done after about 3 minutes, See results, The experiments: all as written. Control and C stops every container; `docker compose down` keeps the data volume; `down -v` removes it. A port clash gives `port is already allocated`. **Fixed in the README from the run:** the ready line is `worker-1 … started.` (not "Worker started"); after a port clash `docker compose down` is needed before `up` (a plain `up` left a broken container: found when restarting the local setup, fixed with `--force-recreate`, data kept); "a couple of hundred megabytes". The test's images, containers and volumes were removed afterwards; the local setup was stopped during the test and is running again.
+- **Not tested:** the Windows steps (no Windows machine; written from Docker's instructions, stated in the README's limits); the optional real-AI box.
+- **Freeze check:** pinned: every library (`pyproject.toml` exact, `uv.lock`, CI `uv sync --locked`, Docker `uv sync --locked`); Docker images by digest (python 3.12.16 slim and full, uv 0.13.7, postgres 16.15-alpine, nginx-unprivileged 1.30.6); every GitHub Action by commit SHA; uv 0.13.7 in all workflows; runners `ubuntu-24.04`; Playwright 1.64.1 (fixes its Chromium); axe-core 4.14.0, Inter 4.1 and the tiktoken file kept in the repo; Gemma by digest (setup.md). Fixed: `.python-version` `3.12` → `3.12.16`. No Dependabot or Renovate file; GitHub's automatic security fixes and vulnerability alerts are off. Can't be pinned (README limits, D133): GitHub's runner image, `playwright install --with-deps` system packages, the reader's Docker Desktop and Ollama.
+- **Code review (10 findings, all fixed):** the E1 wait now comes from the same constant the E1 results are filtered by (`E1_STORY_WAIT`), not the longest wait in the data; "the same 100 texts" is backed by its own number (`at_once_texts`, texts sent per texts-at-once run) instead of the sample count; the E2 extras use the same run groups as the run counts (`e2_groups`); the story tests use made-up values, so rerunning a benchmark doesn't break them; a label on a word or a yes/no value is reported, not a crash or a pass; runs that disagree are reported as that, not as an unknown label; setting defaults are read only from `class Settings` and also from `Field(5, ...)`; a "<" meaning "less than" no longer hides numbers, `~~~` code boxes and links with brackets are handled; `bench/run_all.py` and the command share one `report()`; the screenshot crop measures from the top of the page and stops with a clear message if the element is missing. **Not done:** indented code boxes (four spaces) are not skipped by the number check; the README and write-up use none, and a numbered step's indented lines would look the same.
+- **Leftover for 18b:** GIF, video, "What I'd do next", write-up text, Why/Takeaway in experiments.md; a real screenshot of the GitHub page after the push confirms the Mermaid diagram.
+
 ## Session log
 - 6 Nov 2026 — Planning finished in Claude app. Starting documents created. Tools installed. Decision log D01–D41 approved.
 - 6 Nov 2026 — Slice 0 done: uv project (Python 3.12, exact pins + `uv.lock`), folders, `app/settings.py`, `/health` + tests, `.env.example`, `.gitignore`, MIT licence, placeholder README, `ci.yml` (ruff + pytest, 85% gate).
@@ -261,3 +309,4 @@ Slice 17b (interface fixes after first use, 11 Nov 2026):
 - 9 Nov 2026 — Slice 15 done: prediction pushed first (1108882). 50 reviews picked (seed 15) and translated by Claude, 5 pairs checked by Adar; `bench/cost_tr_en.py` (o200k_base + Gemma raw mode, counted twice), chart `cost_tr_en.png`, cost write-up (Why/Takeaway left for Adar). `bench/run_all.py` (prerequisites, Docker quit/open, E3 GitHub download, timings, `--charts-only`, `--check-only`) and `bench/check_numbers.py` (308 numbers). Three 1 ms slips in E1 fixed. D110–D114 approved.
 - 10 Nov 2026 — Slice 17 done: web interface (8 screens, TR/EN, live progress, crash button), `GET /status`, `POST /jobs/estimate`, CORS, `bench/web_data.py` + number check on the interface, `web` service in compose, browser tests (Playwright + axe) as their own CI job, 19 screenshots compared with the mockup. D115–D124 and spec 6/8/10 updates approved. Review: 10 findings fixed; added demo answers (D125), Turkish messages for every API error code, all 100 sample reviews.
 - 11 Nov 2026 — Slice 17b built: interface fixes after first use (D126–D129 approved), code review's 9 findings fixed (D130), explanation lines and the "i" button. E2 worker line count updated to 481 (Adar's decision); guide step 3 names the buttons in quotation marks.
+- 11 Nov 2026 — Slice 18a built: README (clean-room tested), write-up skeleton, explain-map, number check over README and write-up, style and decision-link tests, `.python-version` pinned, done checklist. D131–D134 approved. Code review's 10 findings fixed. Adar's 11 README changes and the two-sentence web footer done.
