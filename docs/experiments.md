@@ -1,7 +1,7 @@
 # Experiments — Kuyruk
 
-The four experiments of spec 9: where FastAPI's built-in pieces fail, and the
-smallest fix for each. Every prediction is written here **before** the
+The four experiments of spec 9. When you build an AI job service the usual
+way with FastAPI, where does it break, and what is the smallest fix for each? Every prediction is written here **before** the
 experiment runs (spec 9, general protocol) and is never edited afterwards.
 Raw data: `bench/data/`. Charts: `docs/charts/`. Setup notes:
 `bench/data/setup.md`.
@@ -134,9 +134,6 @@ its median, apart from C's few-millisecond values.
 | Best: C; B fine until the threads run out; A freezes everything | C best at every wait. A froze everything, including the slow requests' own answers (see Surprises). B100 (threads run out): 3 waits, /health p95 ≈ 1.85 × the wait. But B already hurt /health's p95 at 50 requests | Partly right: C and A as stated; B not fine at 50 |
 | (real AI, not predicted separately) | A froze /health for the whole job (p95 13.5 s); B and C kept it at 6 ms. All three took the same ~13.5–13.9 s for the 10 texts | — |
 
-### Why it happens
-*[Adar writes this in his own words.]*
-
 ### Surprises
 - **In A, even finished requests can't answer.** 49 of the 50 slow requests
   got their answer only at the very end of the run (at 2 s: 100.6 s, not 2,
@@ -165,7 +162,7 @@ its median, apart from C's few-millisecond values.
   Hence the separate probe process (D96).
 
 ### Takeaway
-*[Adar writes this in his own words.]*
+The way a wait is written changes how long everyone else waits. It changes the job's own time only if the AI can answer several requests at once.
 
 ---
 
@@ -314,30 +311,6 @@ more program to run: the worker's container.
 | Recovery: about the stale time (30 s) plus a second or two | 26.2–34.0 s. Takeover came 25.9–29.9 s after the kill, sometimes before 30 s; then the first text took one AI wait (0.3–5.9 s) | Partly right |
 | Cost: a separate program and some extra database writes (heartbeat every 5 s), small compared with losing work | one more container; 15 of 139 writes (10.8%) per job compared with a job with no heartbeat; 105 lines of recovery code | Right |
 
-### Why it happens
-<!-- draft: Adar to rewrite in his own words -->
-- **Broken: the job's progress lives only in the API process.**
-  BackgroundTasks runs the job inside the API, after the reply is sent. A
-  SIGKILL ends that process with no clean-up, so the database still says
-  "running". The restarted API is a new process with no memory of the job,
-  and nothing is responsible for checking for stuck jobs. So the job never
-  continues: 20 of 40 texts lost in all 25 broken runs.
-- **Why `/health` said fine:** it only checks that the API answers, not that
-  work is moving. A green health check is not proof that jobs are making
-  progress.
-- **Fixed: progress lives in the database.** Each finished text is saved
-  straight away, and the worker writes a heartbeat every 5 s. Once a job's
-  heartbeat is older than the stuck-after time, a worker takes it over and
-  continues from the saved texts: 0 lost in all 30 fixed runs.
-- **Why exactly 4 texts are redone:** 4 texts run at once, and a text in
-  progress is not saved. So all 4 texts that were with the AI are lost at
-  the kill and done again.
-- **Why recovery took 26–34 s:** the countdown starts at the last heartbeat,
-  which was 0–5 s before the kill. Then up to 1 s until the worker's next
-  stuck-job check, then one text's AI wait. The stale-time check confirms
-  it: stuck after 10 / 30 / 60 s gave recovery of 12.5 / 31.7 / 62.0 s, about
-  the stuck-after time plus 2 s.
-
 ### Surprises
 - **Recovery can be shorter than the stale time.** "Stuck" is counted from
   the last heartbeat, not from the kill. The heartbeat comes every 5 s, so at
@@ -363,26 +336,17 @@ more program to run: the worker's container.
   room for a living worker whose heartbeat is late (for example a busy
   database or a paused container) before it looks stuck. Kuyruk uses 30 s,
   six heartbeats (D68).
+- **Why exactly 4 texts are redone:** 4 texts run at once, and a text in
+  progress is not saved. So all 4 texts that were with the AI are lost at
+  the kill and done again.
+- **Why recovery took 26–34 s:** the countdown starts at the last heartbeat,
+  which was 0–5 s before the kill. Then up to 1 s until the worker's next
+  stuck-job check, then one text's AI wait. The stale-time check confirms
+  it: stuck after 10 / 30 / 60 s gave recovery of 12.5 / 31.7 / 62.0 s, about
+  the stuck-after time plus 2 s.
 
 ### Takeaway
-<!-- draft: Adar to rewrite in his own words -->
-- **The rule:** don't run long jobs inside the web server. Use a separate
-  worker, save progress after each item, and add a heartbeat so another
-  worker can take over a stuck job.
-- **What the fix costs:** one extra container; 15 of 139 database writes
-  per job (10.8%), compared with a plain BackgroundTasks job with no
-  heartbeat; 105 of the worker's 481 lines of code.
-- **Work can run twice:** after a crash, up to as many items as run at once
-  are redone (4 here, in every run). With a paid AI service that would mean
-  up to 4 extra paid calls per crash (not tested in E2). Every item must be
-  safe to redo.
-- **Choosing the stuck-after time:** shorter recovers faster (recovery ≈
-  stuck-after + about 2 s). But keep it several heartbeats long, so a worker
-  that is alive but briefly slow doesn't lose its job to another worker (not
-  tested in E2). 30 s with a 5 s heartbeat is a reasonable default.
-- **Monitoring:** watch for jobs stuck in "running", not just `/health`.
-  In E2 the broken job stood still for 5 minutes while `/health` stayed
-  fine.
+The job's memory lived in the program. When the program crashed, the database still said "running", which was misleading. The fix keeps the progress in the database. After a crash it repeats at most the texts that were with the AI at that moment (4 with my setting), and only after a crash. This is called "at least once".
 
 **Note (not built or measured): 4 uvicorn workers with BackgroundTasks.**
 Running the API as 4 uvicorn worker processes (`--workers 4`) doesn't fix
@@ -544,9 +508,6 @@ pip and 3.9× with uv.
 | Risk: forgetting to copy something builds fine but breaks only when run | not seen: all images started; not tested by leaving a line out | Not tested |
 | The slim image lacks curl | no curl in any slim image; curl in the full ones | Right |
 
-### Why it happens
-*[Adar writes this in his own words.]*
-
 ### Surprises
 - **The base image is almost the whole story for size.** 98% of the size
   difference came from changing one line, `FROM`. uv and two stages saved
@@ -572,7 +533,7 @@ pip and 3.9× with uv.
   reuse.
 
 ### Takeaway
-*[Adar writes this in his own words.]*
+I told Docker to start from the slim version of Python, because people who run the app don't need the developer tools. That one choice gave 98% of the size saving. Putting the build steps in a sensible order made rebuilds fast.
 
 ---
 
@@ -688,9 +649,6 @@ be loosened (D84).
 | A pull request from a fork gets "no" | not tested live (D36); GitHub's documentation says secrets are not passed to it | Not tested (documented) |
 | The release workflow has the secret but never runs pull-request code | yes in all 6 Release runs after a push; it only builds the tested commit of a push to main; skipped after all 21 manual runs; never started for the branch or its pull request | Right |
 
-### Why it happens
-*[Adar writes this in his own words.]*
-
 ### Surprises
 - **The cache saved nothing; its own steps were slightly slower.** On GitHub's machines
   uv downloads all 43 libraries from PyPI in about 0.4 s, while restoring
@@ -715,7 +673,7 @@ be loosened (D84).
   run again from the start (`bench/data/setup.md`).
 
 ### Takeaway
-*[Adar writes this in his own words.]*
+The cache saved nothing, so measure before you optimise. For secrets, keep them in GitHub secrets and also control which runs can use them.
 
 ---
 
@@ -802,9 +760,6 @@ word is cut into 1.7–1.8 times as many pieces.
 | With Gemma's tokenizer the gap is smaller | +13% vs +24% (about half) | Right |
 | … but still there | +11% to +13% in every group; Turkish more in 43 of 50 reviews | Right |
 
-### Why it happens
-*[Adar writes this in his own words.]*
-
 ### Surprises
 - **The gap is the same for short and long reviews.** Per group the sum
   ratio moves by at most 4 points (o200k_base 1.20–1.24, Gemma 1.11–1.13).
@@ -824,4 +779,4 @@ word is cut into 1.7–1.8 times as many pieces.
   English ones (7,375 vs 7,753, 5% fewer).
 
 ### Takeaway
-*[Adar writes this in his own words.]*
+Turkish needs more tokens than English (24% more with the counter Kuyruk uses, 13% more with Gemma's). With a paid AI that means a bigger bill. Either way, it uses up the daily budget faster.

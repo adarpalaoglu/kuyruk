@@ -33,11 +33,13 @@ dev = [
 bench = [
     "matplotlib==3.11.2",
 ]
-# Needed only for the browser tests of the web interface (tests/browser/) and
-# the screenshots (scripts/screenshots.py): Playwright drives a real browser.
-# Not installed by `uv sync` or the image; use `uv run --group browser ...`
-# (D123).
+# Needed only for the browser tests of the web interface (tests/browser/),
+# the screenshots (scripts/screenshots.py) and the README's GIF
+# (scripts/record_gif.py): Playwright drives a real browser, Pillow joins the
+# GIF's pictures. Not installed by `uv sync` or the image; use
+# `uv run --group browser ...` (D123, D136).
 browser = [
+    "pillow==13.0.0",
     "playwright==1.64.1",
 ]
 

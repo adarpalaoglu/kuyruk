@@ -299,7 +299,7 @@ def test_code_links_names_and_steps_are_not_numbers_to_check(tmp_path):
         "```\ndocker compose up --wait 5\n```\n"
         "Read [D29](docs/decision-log.md#d29--x) about E1 to E4, "
         "Gemma 4 E4B, Python 3.12, Postgres 16 and WSL 2. Go back to step 3.\n"
-        "<!-- 18b: anything 123 -->\n"
+        "<!-- a note: anything 123 -->\n"
         '<img src="a.png" width="640">\n'
         "See https://example.com/page2.\n"
         "~~~\nsleep 9\n~~~\n"

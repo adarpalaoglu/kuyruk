@@ -3,7 +3,7 @@
 Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12 lists the slices).
 
 ## Current slice
-**Slice 18a** (README and finishing checks) done 11 Nov 2026. Next **Slice 18b** (GIF, video, Adar's own words, write-up).
+**Project finished** (Slice 18b, 14 Nov 2026). Every slice is done and every version is frozen. Every "done" checklist item is ticked; D135 and D136 approved 14 Nov 2026.
 
 ## Slices
 
@@ -29,7 +29,7 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 | 17 | Interface build | ☑ | 818 fast tests (+6 Postgres, +18 browser), 99.71% coverage; 18/18 browser tests incl. axe on 8 screens × 2 languages; clean-machine check 21/21 PASS; number check 362/362; sample job (100 reviews) 186.5 s in demo mode |
 | 17b | Interface fixes after first use | ☑ | 837 fast tests (+6 Postgres, +44 browser), 99.71% coverage; 44/44 browser tests (26 new, both languages, axe and 390 px on every new state); number check 365/365; 32 screenshots |
 | 18a | README and finishing checks | ☑ | 862 fast tests (+6 Postgres, +44 browser), 99.71% coverage; number check 446/446 (README and write-up included); clean-room run of "Run it yourself" passed (ready 12 s after `docker compose up` with base images present) |
-| 18b | GIF, video, Adar's words, write-up | ☐ | Places marked `18b` in README.md, docs/write-up.md and docs/experiments.md |
+| 18b | GIF, picture tour, Adar's words, write-up, freeze | ☑ | 872 fast tests (+6 Postgres, +44 browser), 99.71% coverage; number check 451/451; GIF 12.9 s, 0.52 MB, 33 pictures; 5-picture tour; no "18b" or "coming soon" left |
 
 ## Decision log
 - Entries D01–D41 drafted 5–6 Nov 2026 · Approved by Adar: ☑ (6 Nov 2026)
@@ -50,8 +50,8 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 - D131–D134 (README and finishing checks) · Approved by Adar as worded: ☑ (11 Nov 2026); D132 afterwards also names the colon rule Adar asked for
 - D87–D93 (real AI measurements; D88 and D93 reworded as Adar asked) and the D82 "done" note · Approved by Adar: ☑ (8 Nov 2026); D89 update (memory emptied before every run) and D91 addition approved 8 Nov 2026; D94 (10-minute heat-up) approved 8 Nov 2026
 
-## "Done" checklist (spec 13, checked 11 Nov 2026, Slice 18a)
-☑ = done, with the evidence. ⏳ = waiting for Slice 18b.
+## "Done" checklist (spec 13, checked 14 Nov 2026, Slice 18b)
+☑ = done, with the evidence.
 
 | | Item | ✓ | Evidence |
 |---|---|---|---|
@@ -63,8 +63,8 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 | A | Interface works end to end and matches /docs | ☑ | Parity table below; browser tests incl. axe on 8 screens × 2 languages |
 | A | Demo mode works without Ollama | ☑ | Clean-room run (no Ollama involved, demo mode by default) |
 | A | Crash simulation works | ☑ | Clean-room run: notice 7 s after the click, nothing lost; browser test `test_crash_from_the_job_page_crashes_this_job_and_recovers` |
-| A | Walkthrough video and GIF in README | ⏳ | Placeholders marked `18b` in README.md |
-| B | Every endpoint incl. error cases | ☑ | 839 fast tests, 99.71% coverage |
+| A | GIF and picture tour in README (D136) | ☑ | `docs/screenshots/kuyruk-at-work.gif` from `scripts/record_gif.py`; 5 pictures from `scripts/screenshots.py` (Slice 18b) |
+| B | Every endpoint incl. error cases | ☑ | 872 fast tests, 99.71% coverage (Slice 18b) |
 | B | Every risk (budget race, double-click, AI off, crash, two workers) | ☑ | `test_budget_postgres.py`, `test_jobs_postgres.py`, `test_worker.py`, `test_recovery_postgres.py` |
 | B | Password never returned | ☑ | `tests/test_auth.py::test_hash_never_appears_in_any_reply` |
 | B | Coverage ≥ 85% enforced | ☑ | `pyproject.toml` `--cov-fail-under=85`; CI `test` job |
@@ -74,14 +74,14 @@ Update at the end of every Claude Code session. Plan: `docs/spec.md` (section 12
 | C | E1/E2 sensitivity + real-AI check | ☑ | `docs/experiments.md` E1 and E2 tables |
 | C | One command reruns everything | ☑ | `bench/run_all.py` (D113); `--charts-only` now also checks README and write-up |
 | C | Turkish vs English table | ☑ | `docs/experiments.md` Extra |
-| D | Decision log complete and approved by Adar | ☑ | D01–D134 approved (D131–D134 on 11 Nov 2026) |
-| D | README in the order of spec 11 | ☑ | `README.md` (Slice 18a); GIF and video places marked `18b` |
-| D | Write-up done | ⏳ | Skeleton with checked numbers in `docs/write-up.md`; Adar's text in 18b |
-| D | Adar can answer every hard question in his own words | ⏳ | Pointers in `docs/explain-map.md`; Adar's learning phase |
-| D | "Why it happens" / "Takeaway" in docs/experiments.md | ⏳ | Placeholders for E1, E3, E4, cost; E2 drafts to rewrite |
+| D | Decision log complete and approved by Adar | ☑ | D01–D136 approved (D135–D136 on 14 Nov 2026) |
+| D | README in the order of spec 11 | ☑ | `README.md`: summary, GIF, what it does, tour, diagram, ... (Slice 18b) |
+| D | Write-up done | ☑ | `docs/write-up.md`: Adar's texts and checked facts only, about 1.5 pages; numbers and style tested |
+| D | Adar can answer every hard question in his own words | ☑ | Learning phase completed 12 to 14 November 2026, all 10 topics (Adar); pointers in `docs/explain-map.md` |
+| D | "Takeaway" in docs/experiments.md | ☑ | Adar's texts for E1–E4 and cost; separate "Why it happens" sections removed (E2's two fact bullets moved to Surprises) |
 | E | CI publishes the image from main | ☑ | Release run 43004723834 (Slice 17b); `ghcr.io/adarpalaoglu/kuyruk:latest` downloads without logging in (checked 11 Nov 2026) |
 | E | Repo public, MIT licence, no secrets | ☑ | Public on GitHub, `LICENSE` (MIT); only `.env.example` tracked; no secret values in tracked files (searched 11 Nov 2026) |
-| E | Versions pinned, nothing needs upkeep | ☑ | Freeze check in the Slice 18a notes; `.python-version` now 3.12.16 |
+| E | Versions pinned, nothing needs upkeep | ☑ | Freeze check repeated 14 Nov 2026 (Slice 18b notes); Pillow 13.0.0 pinned |
 
 ## Interface parity (checked 10 Nov 2026, Slice 17)
 Everything on `/docs` can be done in the interface (each proved by a browser test unless noted):
@@ -289,6 +289,15 @@ Slice 18a (README and finishing checks, 11 Nov 2026):
 - **Code review (10 findings, all fixed):** the E1 wait now comes from the same constant the E1 results are filtered by (`E1_STORY_WAIT`), not the longest wait in the data; "the same 100 texts" is backed by its own number (`at_once_texts`, texts sent per texts-at-once run) instead of the sample count; the E2 extras use the same run groups as the run counts (`e2_groups`); the story tests use made-up values, so rerunning a benchmark doesn't break them; a label on a word or a yes/no value is reported, not a crash or a pass; runs that disagree are reported as that, not as an unknown label; setting defaults are read only from `class Settings` and also from `Field(5, ...)`; a "<" meaning "less than" no longer hides numbers, `~~~` code boxes and links with brackets are handled; `bench/run_all.py` and the command share one `report()`; the screenshot crop measures from the top of the page and stops with a clear message if the element is missing. **Not done:** indented code boxes (four spaces) are not skipped by the number check; the README and write-up use none, and a numbered step's indented lines would look the same.
 - **Leftover for 18b:** GIF, video, "What I'd do next", write-up text, Why/Takeaway in experiments.md; a real screenshot of the GitHub page after the push confirms the Mermaid diagram.
 
+Slice 18b (final texts, GIF and freeze, 14 Nov 2026):
+- **New question (D135):** "When you build an AI job service the usual way with FastAPI, where does it break, and what is the smallest fix for each?" in spec 1, the write-up, `docs/experiments.md` and `CLAUDE.md`. No Turkish version (Adar: not needed). The interface and explain-map never showed the question and are unchanged (Adar's choice).
+- **Adar's texts, word for word:** "My takeaway" under E1–E4 and the Turkish finding, and "What I'd do next" in the README; the same in the write-up and as the Takeaways in `docs/experiments.md`. Numbers labelled (98% `e3_base_percent`, 4 `texts_at_once`, 24% and 13% cost). The method line was reworded by Adar to drop a mid-sentence colon (Version B). The write-up's "What it means for real AI services" heading was removed (no text of Adar's for it).
+- **Picture tour (D136):** Welcome top, live job (`job-live-1280-en.png`, new), crash notice, Results top (`results-top-1280-en.png`, new, cut at row 3's bottom line), The experiments top. The three body screenshots were removed (each screen once). All screenshots were remade, which also refreshed the old footer (18a leftover). After the code review every screenshot was made again by the script, so all five tour pictures come from it.
+- **GIF (D136):** `scripts/record_gif.py` (Playwright pictures at fixed progress points, Pillow 13.0.0 joins them; crash at 20 texts; button outlined before each press; sped up). Result: 33 pictures, 12.9 s, 0.52 MB, 800 × 720 px. **Found while checking the frames:** the first full recording turned the orange outline, the red "Cancel job" and the red heart grey, because the shared palette came from only 3 of the pictures and favoured big areas. Now the palette is chosen from every distinct colour of every picture (each counted once); a test proves a small orange mark survives (it fails with the old palette). Recorded again afterwards. Tests: `tests/test_record_gif.py` (timing plan, GIF joining; the joining tests skip without Pillow).
+- **Code review (9 findings; 1 to 8 fixed, 9 needed no change):** the GIF script reads the progress count once per look (it read it once per point, so pictures could come out of order); stops at once, saying how, if the job ends failed or cancelled or the API answers with an error; waits up to a minute for the job to start (another job may hold the worker); checks first that the sample file has the 100 reviews its timing is planned for; prints the frames really in the file (Pillow merges identical pictures in a row) and checks the file's own play time; a missing docstring added in the test; the Results crop looks for the third result row by its class; the screenshots were made again with the script so every tour picture really comes from it (the hand-cut Results top was replaced). Finding 9 (spec changed before D135/D136 were approved) needed no change: Adar asked for those spec changes, and approved both entries afterwards. 4 tests added.
+- **Adar's changes after the review:** the write-up's E1 line uses the README's wording ("in a typical run, the slowest one in twenty answers"); the write-up's fact lines no longer repeat a number that his takeaway right after gives (E3's 98%, the cost percentages); the README's tour moved to just after "What it does, in plain words" (spec 11 updated); the Turkish question is not used anywhere; D135 and D136 approved.
+- **Freeze check (14 Nov 2026):** 16 libraries all `==`, `uv lock --check` clean, every Action by commit SHA, every image by digest, `uv sync --locked` everywhere, runners `ubuntu-24.04`, `.python-version` 3.12.16, no Dependabot or Renovate.
+
 ## Session log
 - 6 Nov 2026 — Planning finished in Claude app. Starting documents created. Tools installed. Decision log D01–D41 approved.
 - 6 Nov 2026 — Slice 0 done: uv project (Python 3.12, exact pins + `uv.lock`), folders, `app/settings.py`, `/health` + tests, `.env.example`, `.gitignore`, MIT licence, placeholder README, `ci.yml` (ruff + pytest, 85% gate).
@@ -310,3 +319,4 @@ Slice 18a (README and finishing checks, 11 Nov 2026):
 - 10 Nov 2026 — Slice 17 done: web interface (8 screens, TR/EN, live progress, crash button), `GET /status`, `POST /jobs/estimate`, CORS, `bench/web_data.py` + number check on the interface, `web` service in compose, browser tests (Playwright + axe) as their own CI job, 19 screenshots compared with the mockup. D115–D124 and spec 6/8/10 updates approved. Review: 10 findings fixed; added demo answers (D125), Turkish messages for every API error code, all 100 sample reviews.
 - 11 Nov 2026 — Slice 17b built: interface fixes after first use (D126–D129 approved), code review's 9 findings fixed (D130), explanation lines and the "i" button. E2 worker line count updated to 481 (Adar's decision); guide step 3 names the buttons in quotation marks.
 - 11 Nov 2026 — Slice 18a built: README (clean-room tested), write-up skeleton, explain-map, number check over README and write-up, style and decision-link tests, `.python-version` pinned, done checklist. D131–D134 approved. Code review's 10 findings fixed. Adar's 11 README changes and the two-sentence web footer done.
+- 14 Nov 2026 — Slice 18b built: new question (D135), picture tour and scripted GIF (D136), Adar's texts in README, write-up and experiments.md, placeholders removed, freeze check repeated. Project finished.

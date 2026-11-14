@@ -753,3 +753,20 @@ Status key: **Draft** = written from my answers, waiting for my approval · **Ap
 - **Decision:** the architecture diagram is written as Mermaid, which GitHub draws from text. There is no image file.
 - **Why:** text can't get out of step with an image file, and anyone can change it in the same file.
 - **Date:** 11 Nov 2026 · **Status:** Approved (11 Nov 2026)
+
+---
+
+## Final texts and freeze (Slice 18b)
+
+### D135 — The question is about the usual way of building, not about FastAPI
+- **Options:** keep "For long AI jobs, where exactly do FastAPI's built-in pieces fail, and what is the smallest fix for each?" · "When you build an AI job service the usual way with FastAPI, where does it break, and what is the smallest fix for each?"
+- **Decision:** the second. Changed in the spec, the write-up, `docs/experiments.md` and `CLAUDE.md`. The README's first paragraph already said it this way. The interface never showed the question, so it is unchanged.
+- **Why:** the failures come from the usual way of writing the code, not from FastAPI itself.
+- **Date:** 14 Nov 2026 · **Status:** Approved (14 Nov 2026)
+
+### D136 — A tour in pictures instead of a walkthrough video
+- **Options:** a 2 to 3 minute video · screenshots with captions plus a GIF, both made by scripts.
+- **Decision:** 5 screenshots made by `scripts/screenshots.py` (Welcome, a live job, the crash recovery notice, results, The experiments), each with one plain caption, and a sped-up GIF of one job recorded from demo mode by `scripts/record_gif.py` (Playwright takes the pictures, Pillow 13.0.0 joins them).
+- **Why:** the project must be reproducible without manual work. A video has to be recorded by hand. The scripts make the same pictures again on every run.
+- **Cost:** no narrated full walkthrough. The GIF covers the part that moves. A rerun gives the same story and length, but small details (ticket number, clock times, how many dots are filled in each picture) can differ.
+- **Date:** 14 Nov 2026 · **Status:** Approved (14 Nov 2026)

@@ -7,7 +7,9 @@ Turkish. Slice 17b's additions too: Create your account, New job with the
 first-time guide, and a cancelled job's page and results with "Send the
 texts without a result as a new job" (both widths in English, 1280 px in
 Turkish), and the job page with its "i" explanation open (1280 px, both
-languages).
+languages). Slice 18b adds the README's picture tour: the live job just
+before the crash (`job-live-1280-en.png`) and the top of Results
+(`results-top-1280-en.png`).
 
 It needs the running setup in demo mode (`docker compose up -d --wait`) and
 the browser tests' library:
@@ -125,14 +127,18 @@ def shoot(page, file: str) -> None:
     print(f"  {file}")
 
 
-# The README shows only the top of two long pages (Slice 18a): down to the
-# end of the element named here, plus a little of the background under it.
-# A CSS selector ("a way to point at one part of a page") for each.
+# The README shows only the top of three long pages (Slice 18a, 18b): down to the
+# end of the element named here, plus a few pixels of the background under it.
+# A CSS selector ("a way to point at one part of a page") for each, and how
+# many pixels to keep below it.
 TOPS = {
-    "welcome": ".problem-card",  # the hero and the first problem card
-    "experiments": ".exp",  # the heading and Experiment 1's band
+    "welcome": (".problem-card", 24),  # the hero and the first problem card
+    "experiments": (".exp", 24),  # the heading and Experiment 1's band
+    # Results' heading and its first 3 rows (the whole page is over 4,000 px
+    # tall, because some sample reviews are long). Cut right at the row's
+    # bottom line: any lower would show the top of row 4.
+    "results": ("#rows > .results-row:nth-child(3)", 0),
 }
-TOP_MARGIN = 24  # pixels of background kept under that element
 
 
 def shoot_top(page, screen: str) -> None:
@@ -150,14 +156,14 @@ def shoot_top(page, screen: str) -> None:
             if (!element) return null;
             return element.getBoundingClientRect().bottom + window.scrollY;
         }""",
-        TOPS[screen],
+        TOPS[screen][0],
     )
     if bottom is None:
         raise SystemExit(
-            f"The {screen} page has no {TOPS[screen]} to cut at. Was it renamed? "
+            f"The {screen} page has no {TOPS[screen][0]} to cut at. Was it renamed? "
             "Update TOPS in scripts/screenshots.py."
         )
-    height = bottom + TOP_MARGIN
+    height = bottom + TOPS[screen][1]
     file = f"{screen}-top-1280-en.png"
     clip = {"x": 0, "y": 0, "width": 1280, "height": height}
     page.screenshot(path=str(OUT / file), full_page=True, clip=clip)
@@ -181,10 +187,12 @@ def main() -> None:
         expect(job.locator("#sentence")).to_have_text(re.compile("Summarising"))
         # Let it run a while first, so the screen shows some progress.
         job.wait_for_timeout(40_000)
+        print("Screens:")
+        # The same job a moment before the crash, for the README's tour.
+        shoot(job, "job-live-1280-en.png")
         job.click("#crash")
         expect(job.locator("#recovered")).to_be_visible(timeout=60_000)
         job.wait_for_timeout(4000)
-        print("Screens:")
         shoot(job, "job-1280-en.png")
         job.set_viewport_size({"width": 390, "height": 900})
         shoot(job, "job-390-en.png")

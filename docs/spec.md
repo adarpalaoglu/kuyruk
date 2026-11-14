@@ -1,13 +1,13 @@
 # Kuyruk — specification
 
-Owner and decision-maker: Adar Palaoğlu. Code: Claude Code. Last updated: 11 November 2026.
+Owner and decision-maker: Adar Palaoğlu. Code: Claude Code. Last updated: 14 November 2026.
 Reasons for every decision: `docs/decision-log.md`. Status: `docs/progress.md`.
 
 ---
 
 ## 1. Goal and question
 
-**Question:** For long AI jobs, where exactly do FastAPI's built-in pieces fail, and what is the smallest fix for each?
+**Question:** When you build an AI job service the usual way with FastAPI, where does it break, and what is the smallest fix for each? (D135)
 
 Kuyruk is a test bench. The app shows the foundation of AI systems (a tested API, a database, a background worker, CI); the four experiments show where that foundation breaks. It works like the Anthropic/OpenAI batch APIs: a **job** (batch) contains many **texts** (requests); the user gets a **ticket** (batch id) immediately and collects results later.
 
@@ -220,7 +220,7 @@ Two equal ways to use Kuyruk: `/docs` for developers; the web interface for ever
 
 `app/`, `tests/`, `bench/`, `docker/`, `web/`, `compose.yaml`, `.github/workflows/ci.yml` and `release.yml`, `docs/decision-log.md`, `docs/experiments.md`, `docs/progress.md`, README, 1–2 page write-up, MIT licence.
 
-README order: one-sentence summary → GIF → walkthrough video (2–3 min: full flow, Behind the scenes, crash button, real AI) → diagram → run it yourself (`docker compose up`) → API overview → four experiments, one chart and one-line finding each → bonus findings (Turkish cost, texts at once) → key decisions → limits and what I'd do next → "The stack is standard. The experiments and decisions are mine." → credits.
+README order: one-sentence summary → GIF (recorded from demo mode by `scripts/record_gif.py`: send the sample reviews, the dots, a simulated crash, the recovery notice, the job finishing; 10–15 s, under 5 MB) → what it does, in plain words → a tour in pictures (5 screenshots made by `scripts/screenshots.py`: Welcome, a live job, the crash recovery notice, results, The experiments; one plain caption each; D136) → diagram → run it yourself (`docker compose up`) → API overview → four experiments, one chart and one-line finding each → bonus findings (Turkish cost, texts at once) → key decisions → limits and what I'd do next → "The stack is standard. The experiments and decisions are mine." → credits.
 
 ---
 
@@ -246,13 +246,13 @@ README order: one-sentence summary → GIF → walkthrough video (2–3 min: ful
 | 15 | Extras: Turkish vs English cost table; one-command rerun of all experiments | Reproducible |
 | 16 | Interface mockup (in Claude app) → Adar's approval | Approved design |
 | 17 | Interface build: all screens, TR/EN, CORS, demo mode, crash button, parity check | Everything on /docs works in the interface |
-| 18 | Finish: README, diagram, GIF, walkthrough video, write-up, final "done" checklist, freeze versions | Project done |
+| 18 | Finish: README, diagram, GIF, picture tour, write-up, final "done" checklist, freeze versions | Project done |
 
 ---
 
 ## 13. "Done" checklist
 
-**A. Works:** `docker compose up` starts everything on a clean machine · full user flow (sign up, log in, send, watch, cancel, results) · all three tasks with real and fake AI · limits and budget with clear errors · unfinished jobs carry on after a crash · interface works end to end and matches /docs · demo mode works without Ollama · crash simulation works · walkthrough video and GIF in README.
+**A. Works:** `docker compose up` starts everything on a clean machine · full user flow (sign up, log in, send, watch, cancel, results) · all three tasks with real and fake AI · limits and budget with clear errors · unfinished jobs carry on after a crash · interface works end to end and matches /docs · demo mode works without Ollama · crash simulation works · GIF and picture tour in README.
 
 **B. Tested:** every endpoint incl. error cases · every risk (budget race, double-click, AI off, crash, two workers) · password never returned · coverage ≥ 85% enforced · all tests pass on both databases.
 

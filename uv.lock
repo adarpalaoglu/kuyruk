@@ -368,6 +368,7 @@ bench = [
     { name = "matplotlib" },
 ]
 browser = [
+    { name = "pillow" },
     { name = "playwright" },
 ]
 dev = [
@@ -392,7 +393,10 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 bench = [{ name = "matplotlib", specifier = "==3.11.2" }]
-browser = [{ name = "playwright", specifier = "==1.64.1" }]
+browser = [
+    { name = "pillow", specifier = "==13.0.0" },
+    { name = "playwright", specifier = "==1.64.1" },
+]
 dev = [
     { name = "pytest", specifier = "==9.2.0" },
     { name = "pytest-cov", specifier = "==7.1.0" },

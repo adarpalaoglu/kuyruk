@@ -3,7 +3,7 @@
 Read this first in every session. Then read `docs/progress.md` (where we are) and only the section of `docs/spec.md` for the current slice.
 
 ## What Kuyruk is
-A small, well-tested FastAPI job service for long Turkish text jobs, plus four experiments that measure where FastAPI's built-in pieces fail and the smallest fix for each. Full plan: `docs/spec.md`. Decisions and reasons: `docs/decision-log.md`.
+A small, well-tested FastAPI job service for long Turkish text jobs, plus four experiments that measure where the usual way of building an AI job service with FastAPI breaks, and the smallest fix for each. Full plan: `docs/spec.md`. Decisions and reasons: `docs/decision-log.md`.
 
 ## Who decides
 - Adar is the director: he makes every decision. Do not change a decision in `docs/decision-log.md` or `docs/spec.md` on your own. If something in the spec seems wrong, stop and explain the problem and the options in plain English.

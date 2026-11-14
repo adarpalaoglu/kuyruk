@@ -2,11 +2,7 @@
 
 **Kuyruk** (Turkish for "queue") is a small service that sends big piles of Turkish texts to an AI without losing any of them. It comes with four experiments. Each one finds where the usual way of building such a service breaks, and measures the smallest fix.
 
-<!-- 18b: the GIF goes here (a few seconds of a job running, crashing and recovering). -->
-*A short GIF of Kuyruk at work is coming soon.*
-
-<!-- 18b: the walkthrough video goes here (2 to 3 minutes: the full flow, The experiments, the crash button, the real AI). -->
-*A walkthrough video is coming soon.*
+![Kuyruk at work, sped up. The sample reviews are sent, the dots fill in, a crash is simulated, a grey notice says another worker took over and nothing was lost, and the job finishes.](docs/screenshots/kuyruk-at-work.gif)
 
 ## What it does, in plain words
 
@@ -16,7 +12,29 @@ Kuyruk takes a **job**, which is a pile of up to 1,000<!--s:max_texts_per_job-->
 
 Building that is ordinary work. The interesting part is the four experiments. Each one takes a mistake that looks perfectly normal in code, shows what it breaks, and measures the smallest change that fixes it.
 
-![The top of the Welcome page, with the first of four problems you won't see in a demo, its fix and its measured result.](docs/screenshots/welcome-top-1280-en.png)
+## A tour in pictures
+
+All pictures were made by a script (`scripts/screenshots.py`) in demo mode.
+
+![The top of the Welcome page.](docs/screenshots/welcome-top-1280-en.png)
+
+The Welcome page names four problems you won't see in a demo, each with its fix and its measured result.
+
+![A job at work, with one dot per text.](docs/screenshots/job-live-1280-en.png)
+
+A job at work. Each dot is one text, and the line under the big number says which text is being summarised.
+
+![The same job after a simulated crash, with a grey notice.](docs/screenshots/job-1280-en.png)
+
+The same job after "Simulate a crash". The grey notice says another worker took over and nothing was lost.
+
+![The top of the results page.](docs/screenshots/results-top-1280-en.png)
+
+The results. Each review sits next to its summary, ready to download.
+
+![The top of The experiments page.](docs/screenshots/experiments-top-1280-en.png)
+
+The experiments page. Each experiment in plain words, with its fix and its measured result.
 
 ## How it fits together
 
@@ -33,8 +51,6 @@ flowchart LR
 ```
 
 The dotted lines are the safety net. While the worker works, it writes a small "still alive" note to the database every few seconds. That note is called a **heartbeat**. If a worker crashes, its heartbeat goes quiet. Another worker notices, takes the job over and carries on from the first unfinished text. Nothing that was already finished is lost.
-
-![A live job with one dot per text, and a notice saying the worker stopped, another worker took over, and nothing was lost.](docs/screenshots/job-1280-en.png)
 
 ## Run it yourself
 
@@ -104,7 +120,7 @@ Open your web browser and go to this address:
 http://localhost:8080
 ```
 
-You should see the Welcome page, the one in the picture above. Here is a good first visit.
+You should see the Welcome page, the first picture in the tour above. Here is a good first visit.
 
 1. Click **Try it yourself** and create an account. The username needs at least 3<!--s:username_min_length--> characters, using English letters, digits and the _ sign (no Turkish letters). The password needs at least 8<!--s:password_min_length--> characters. The account only exists on your computer.
 2. A short guide appears. Click **Use sample reviews**, then **Send**. That sends 100<!--n:samples_count--> made-up Turkish product reviews to be summarised.
@@ -175,6 +191,8 @@ Each experiment follows the same plan. I wrote down what I expected **before** m
 
 **What I measured.** With the fix, the same measure was 7<!--n:e1_good_ms--> milliseconds. That is about 36,000<!--n:e1_times_faster--> times faster.
 
+**My takeaway.** The way a wait is written changes how long everyone else waits. It changes the job's own time only if the AI can answer several requests at once.
+
 ### E2. Restart the server mid-job, and the job vanishes
 
 ![Chart of the texts lost and texts done twice after a crash, the usual way and with the worker.](docs/charts/e2_lost_redone.png)
@@ -184,6 +202,8 @@ Each experiment follows the same plan. I wrote down what I expected **before** m
 **The fix.** Save every result the moment it is ready, and do the work in a separate worker that sends a heartbeat. When the heartbeat goes quiet, another worker takes the job over.
 
 **What I measured.** In all 30<!--n:e2_fixed_runs--> runs, 0<!--n:e2_fixed_lost--> texts were lost and every job finished. The work carried on about 30<!--n:e2_recovery_about_s--> seconds after the crash (between 26<!--n:e2_recovery_min_s--> and 34<!--n:e2_recovery_max_s--> seconds), because a job counts as stuck once its heartbeat has been quiet for 30<!--n:e2_stale_s--> seconds. The price is that 4<!--n:e2_redone--> texts were done twice every time. Those were the ones that were with the AI at the moment of the crash.
+
+**My takeaway.** The job's memory lived in the program. When the program crashed, the database still said "running", which was misleading. The fix keeps the progress in the database. After a crash it repeats at most the texts that were with the AI at that moment (4<!--s:texts_at_once--> with my setting), and only after a crash. This is called "at least once".
 
 ### E3. Every update ships a 1.3<!--n:e3_bad_gb--> GB package
 
@@ -195,6 +215,8 @@ Each experiment follows the same plan. I wrote down what I expected **before** m
 
 **What I measured.** The careful image was 259<!--n:e3_good_mb--> MB, about 5<!--n:e3_times_smaller--> times smaller. The surprise was that 98<!--n:e3_base_percent-->% of the saving came from one line, the choice of base. After a one-line code change, rebuilding took 0.5<!--n:e3_rebuild_good_s--> seconds instead of 15.6<!--n:e3_rebuild_bad_s-->, about 30<!--n:e3_times_faster--> times faster.
 
+**My takeaway.** I told Docker to start from the slim version of Python, because people who run the app don't need the developer tools. That one choice gave 98<!--n:e3_base_percent-->% of the size saving. Putting the build steps in a sensible order made rebuilds fast.
+
 ### E4. Everyone says to add a cache to speed up your checks
 
 ![Chart of how long GitHub's automatic checks took with the download cache on and off.](docs/charts/e4_cache.png)
@@ -205,17 +227,19 @@ Each experiment follows the same plan. I wrote down what I expected **before** m
 
 **What I measured.** 90<!--n:e4_cache_on_s--> seconds with the cache, 90<!--n:e4_cache_off_s--> seconds without. Downloading everything took only 0.42<!--n:e4_download_s--> seconds, so the cache saved 0<!--n:e4_saved_s--> seconds. Good advice in general isn't always good advice for you.
 
+**My takeaway.** The cache saved nothing, so measure before you optimise. For secrets, keep them in GitHub secrets and also control which runs can use them.
+
 ## Bonus findings
 
 **Turkish costs more than English.** AI services charge per **token**, a small piece of a word. I counted the same 50<!--n:cost_reviews--> reviews in Turkish and in English. Turkish needed 24<!--n:cost_percent_more-->% more tokens with the counter Kuyruk uses for its budget, and 13<!--n:cost_gemma_percent_more-->% more with Gemma's own. Turkish uses fewer words, but builds long words out of many endings, and each word is cut into more pieces.
 
 ![Chart of the tokens for the same reviews in Turkish and English.](docs/charts/cost_tr_en.png)
 
+**My takeaway.** Turkish needs more tokens than English (24<!--n:cost_percent_more-->% more with the counter Kuyruk uses, 13<!--n:cost_gemma_percent_more-->% more with Gemma's). With a paid AI that means a bigger bill. Either way, it uses up the daily budget faster.
+
 **Sending more at once didn't help.** The worker sends several texts to the AI at once. But on my Mac, Ollama answered one request at a time. The same 100<!--n:at_once_texts--> texts took 182<!--n:at_once_fewest_s--> seconds sent 1<!--n:at_once_fewest--> at a time and 181<!--n:at_once_most_s--> seconds sent 8<!--n:at_once_most--> at a time. Sending more at once only helps if the AI server can really answer several at once.
 
 ![Chart of the total time for the same texts, sent one, two, four or eight at a time.](docs/charts/texts_at_once.png)
-
-![The top of The experiments page, with the first experiment and its result.](docs/screenshots/experiments-top-1280-en.png)
 
 ## Key decisions
 
@@ -251,8 +275,7 @@ Kuyruk is a test bench, not a product. These are the limits I know of.
 
 ## What I'd do next
 
-<!-- 18b: Adar writes this in his own words. -->
-*Coming soon.*
+My next focus is reliability. First, I would test more kinds of failure than one worker stopping in the middle of a job. Second, I would rerun the experiments on a cloud AI that can answer several requests at once, because Ollama on my Mac answers one at a time. That would show whether the experiment results change when the AI is no longer the bottleneck.
 
 ## How this was built
 
